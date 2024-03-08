@@ -801,6 +801,31 @@ def calculate_angle(vector1, vector2):
     cosine_angle = dot_product / (magnitude1 * magnitude2)
     return math.acos(cosine_angle)  # Angle in radians
 
+def list_not_in_lists(tuple_to_check, list_of_tuples):
+    for tup in list_of_tuples:
+        if tup == tuple_to_check:
+            return False
+    return True
+
+def find_rest_paths(edges, points, trunk):
+    visited_points = copy.deepcopy(points)
+    count = 1
+    new_paths = []
+
+    while count:
+        count = 0
+        for edge in edges:
+            point_1 = edge[0]
+            point_2 = edge[1]
+
+            if ((point_1 in visited_points) and (point_2 not in visited_points) and list_not_in_lists(edge, trunk)) or ((point_1 not in visited_points) and list_not_in_lists(edge, trunk) and (point_2 in visited_points)):
+                count += 1
+                new_paths.append(edge)
+                visited_points.append(point_1)
+                visited_points.append(point_2)
+
+    return new_paths, visited_points
+
 def find_skeleton(segment_image,
                   original_image=None, 
                   index=[], 
@@ -861,7 +886,7 @@ def find_skeleton(segment_image,
 
     if 5 in index or 6 in index:
         aca_endpoints = [15, 701]
-        directions = ['right', 'left']
+        directions = ['left', 'right']
         end_point_1, end_point_2 = skeleton_points[aca_endpoints[0]], skeleton_points[aca_endpoints[1]]
 
         v2 = end_point_1 - end_point_2
@@ -881,76 +906,146 @@ def find_skeleton(segment_image,
         junction_points, new_neighbor_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
 
         edges = []
-
         for i in range(skeleton_points.shape[0]):
             for j in range(i+1, skeleton_points.shape[0]):
                 if i != j and (new_neighbor_distances[i][j] > 0 or new_neighbor_distances[j][i] > 0):
                     lines.append([skeleton_points[i], skeleton_points[j]])
                     edges.append([i, j])
 
-        list_paths = []
+        main_trunks = []
         for i, endpoint in enumerate(aca_endpoints):
+            list_paths = []
             for point in end_points:
-                if point not in aca_endpoints and i!= 0:
+                if point not in aca_endpoints:
                     shortest_cost, shortest_path = dijkstra(edges, endpoint, point, skeleton_points, directions[i])
                     list_paths.append(shortest_path)
 
-        path_weights = {}
 
-        for path in list_paths:
-            for i in range(len(path)-1):
-                point_1 = path[i]
-                point_2 = path[i+1]
+            path_weights = {}
 
-                if point_1 < point_2:
-                    key = (point_1, point_2)
-                else:
-                    key = (point_2, point_1)
-                
-                if key not in path_weights:
-                    path_weights[key] = 0
-                
-                path_weights[key] += 1
-        
-        for edge in edges:
-            point_1 = edge[0]
-            point_2 = edge[1]
+            for path in list_paths:
+                for i in range(len(path)-1):
+                    point_1 = path[i]
+                    point_2 = path[i+1]
 
-            if point_1 < point_2:
-                key = (point_1, point_2)
-            else:
-                key = (point_2, point_1)
+                    if point_1 < point_2:
+                        key = (point_1, point_2)
+                    else:
+                        key = (point_2, point_1)
+                    
+                    if key not in path_weights:
+                        path_weights[key] = 0
+                    
+                    path_weights[key] += 1
             
-            if key in path_weights:
-                line_value = path_weights[key]
-            else:
-                line_value = 0
-            line_values.append(line_value)
-    
-    # Create traces for each line
-    line_traces = []
-    color_scale = [
-        [0, 'blue'],    # Color for low weight values
-        [0.5, 'green'], # Color for medium weight values
-        [1, 'red']      # Color for high weight values
-    ]
+            filtered_weights = {key: value for key, value in path_weights.items() if value != 1}
+            start_point = endpoint
+            visited_edges = []
+            main_points = [start_point]
 
-    for i, line in enumerate(lines):
-        color = 'blue'
-        x_vals = [point[0] for point in line]
-        y_vals = [point[1] for point in line]
-        z_vals = [point[2] for point in line]
-        trace = go.Scatter3d(x=x_vals, y=y_vals, z=z_vals, 
-                                mode='lines', 
-                                line=dict(
-                                    color=line_values[i],
-                                    colorscale=color_scale,
-                                    cmin=min(line_values),
-                                    cmax=max(line_values)
-                                ), 
-                                text=f'Weight {line_values[i]}'
-                            )
-        line_traces.append(trace)
+            while start_point != -1:
+                connected_edges = []
+
+                for key, value in path_weights.items():
+                    if start_point in key and list_not_in_lists(key, visited_edges):
+                        connected_edges.append(key)
+
+                if len(connected_edges) == 0:
+                    start_point = -1
+                else:
+                    weights = [path_weights[key] for key in connected_edges]
+                    max_value = max(weights)
+                    max_positions = [i for i, weight in enumerate(weights) if weight == max_value]
+                    
+                    if len(max_positions) > 1:
+                        start_point = -1
+                    else:
+                        edge = connected_edges[max_positions[0]]
+                        if start_point == edge[0]:
+                            start_point = edge[1]
+                        else:
+                            start_point = edge[0]
+                        visited_edges.append(edge)
+                        main_points.append(start_point)
+            
+            main_trunk = []
+            for idx in range(len(main_points) - 1):
+                if main_points[idx] < main_points[idx+1]:
+                    main_trunk.append([main_points[idx], main_points[idx+1]])
+                else:
+                    main_trunk.append([main_points[idx+1], main_points[idx]])
+            
+            main_trunks.append(main_trunk)
+            
+        common_paths = []
+        differ_points = []
+
+        # Convert each sublist to sets for easier comparison
+        set1 = {tuple(sublist) for sublist in main_trunks[0]}
+        set2 = {tuple(sublist) for sublist in main_trunks[1]}
+
+        # Find the common 2-element lists
+        common_paths = set1.intersection(set2)
+        common_paths = [list(sublist) for sublist in common_paths]
+        differ_path1s = set1 - set2
+        differ_path1s = [list(sublist) for sublist in differ_path1s]
+        differ_path2s = set2 - set1
+        differ_path2s = [list(sublist) for sublist in differ_path2s]
+        undefined_paths = []
+    
+        path1_points = list(set([item for sublist in main_trunks[0] for item in sublist]))
+        path2_points = list(set([item for sublist in main_trunks[1] for item in sublist]))
+
+        differ_point1s = set(path1_points) - set(path2_points)
+        differ_point1s = list(differ_point1s)
+        differ_point2s = set(path2_points) - set(path1_points)
+        differ_point2s = list(differ_point2s)
+
+        new_path1s, new_point1s = find_rest_paths(edges, differ_point1s, main_trunks[0])
+        new_path2s, new_point2s = find_rest_paths(edges, differ_point2s, main_trunks[1])   
+
+        differ_path1s = set(map(tuple, differ_path1s + new_path1s))
+        differ_path1s = [list(sublist) for sublist in differ_path1s]
+        differ_path2s = set(map(tuple, differ_path2s + new_path2s))
+        differ_path2s = [list(sublist) for sublist in differ_path2s]
+
+        differ_point1s = list(set([item for sublist in differ_path1s for item in sublist]))
+        differ_point2s = list(set([item for sublist in differ_path2s for item in sublist]))
+
+        for edge in edges:
+            if list_not_in_lists(edge, common_paths) and list_not_in_lists(edge, differ_path1s) and list_not_in_lists(edge, differ_path2s):
+                undefined_paths.append(edge)
+
+        undefined_points = list(set([item for sublist in undefined_paths for item in sublist]))
+        common_points = list(set([item for sublist in common_paths for item in sublist]))
+
+        print(differ_point1s)
+        print(differ_point2s)
+        print(undefined_points)
+
+        for point in junction_points:
+            if (point in undefined_points) and ((point in differ_point1s) or (point in differ_point2s) or (point in common_points)):
+                print(point)
+
+        line_groups = [common_paths, differ_path2s, differ_path1s, undefined_paths]
+        line_colors = ['black', 'blue', 'green', 'orange']
+
+        # Create traces for each line
+        line_traces = []
+
+        for i, line_group in enumerate(line_groups):
+            for line in line_group:
+                color = line_colors[i]
+                x_vals = [skeleton_points[point][0] for point in line]
+                y_vals = [skeleton_points[point][1] for point in line]
+                z_vals = [skeleton_points[point][2] for point in line]
+                trace = go.Scatter3d(x=x_vals, y=y_vals, z=z_vals, 
+                                        mode='lines', 
+                                        line=dict(
+                                            color=color
+                                        ), 
+                                    )
+                line_traces.append(trace)
 
     # lines_2 = []
     # for line in connected_lines:
