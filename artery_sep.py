@@ -824,7 +824,103 @@ def find_rest_paths(edges, points, trunk):
                 visited_points.append(point_1)
                 visited_points.append(point_2)
 
-    return new_paths, visited_points
+    return new_paths
+
+def split_direction_2(principal_vectors, other_vectors):
+    left_vectors = []
+    right_vectors = []
+
+    a11 = find_angle(principal_vectors[0], other_vectors[0])
+    a12 = find_angle(principal_vectors[0], other_vectors[1])
+    a21 = find_angle(principal_vectors[1], other_vectors[0])
+    a22 = find_angle(principal_vectors[1], other_vectors[1])
+    min_angle = min(a11, a12, a21, a22)
+
+    if min_angle == a11 or min_angle == a22:
+        return 1, 0
+    else:
+        return 0, 1
+    
+def split_direction_1(principal_vector, other_vectors):
+    left_vectors = []
+    right_vectors = []
+
+    a11 = find_angle(principal_vector, other_vectors[0])
+    a12 = find_angle(principal_vector, other_vectors[1])
+    min_angle = min(a11, a12)
+
+    if min_angle == a11:
+        return 1, 0
+    else:
+        return 0, 1
+
+def find_neighbors(point, left_paths, right_paths, connected_lines, stop_left_paths, stop_right_paths):
+    left_point = None
+    right_point = None
+
+    left_path_index = None
+    left_connected_index = None
+    right_path_index = None
+    right_connected_index = None
+
+    for i, path in enumerate(left_paths):
+        if (path[0] == point or path[-1] == point) and (i not in stop_left_paths):
+            for j, connected_line in enumerate(connected_lines):
+                if (path[0] in connected_line and path[-1] in connected_line):
+                    if point == connected_line[0]:
+                        left_point = connected_line[1]
+                        left_path_index = i
+                        left_connected_index = j
+                        break
+                    elif point == connected_line[-1]:
+                        left_point = connected_line[-2]
+                        left_path_index = i
+                        left_connected_index = j
+                        break
+
+    for i, path in enumerate(right_paths):
+        if (path[0] == point or path[-1] == point) and (i not in stop_right_paths):
+            for j, connected_line in enumerate(connected_lines):
+                if (path[0] in connected_line and path[-1] in connected_line):
+                    if point == connected_line[0]:
+                        right_point = connected_line[1]
+                        right_path_index = i
+                        right_connected_index = j
+                        break
+                    elif point == connected_line[-1]:
+                        right_point = connected_line[-2]
+                        right_path_index = i
+                        right_connected_index = j
+                        break
+
+    if left_point and right_point:
+        return [{
+            'point': left_point,
+            'path': left_path_index,
+            'connected_line': left_connected_index
+            }, {
+            'point': right_point,
+            'path': right_path_index,
+            'connected_line': right_connected_index
+            }]
+    else:
+        return None
+
+def find_p4_p5(p1, p2, p3):
+    # Compute direction vectors
+    p1p2 = np.array(p2) - np.array(p1)
+    p2p1 = -p1p2
+    p3p4 = p1p2
+    p3p5 = p2p1
+    # Normalize direction vectors
+    p3p4_normalized = p3p4 / np.linalg.norm(p3p4)
+    p3p5_normalized = p3p5 / np.linalg.norm(p3p5)
+
+    # Compute positions of p4 and p5
+    p5 = np.array(p3) + p3p4_normalized
+    p4 = np.array(p3) + p3p5_normalized
+
+    return p4, p5
 
 def find_skeleton(segment_image,
                   original_image=None, 
@@ -913,6 +1009,7 @@ def find_skeleton(segment_image,
                     edges.append([i, j])
 
         main_trunks = []
+        line_weights = []
         for i, endpoint in enumerate(aca_endpoints):
             list_paths = []
             for point in end_points:
@@ -938,7 +1035,6 @@ def find_skeleton(segment_image,
                     
                     path_weights[key] += 1
             
-            filtered_weights = {key: value for key, value in path_weights.items() if value != 1}
             start_point = endpoint
             visited_edges = []
             main_points = [start_point]
@@ -976,9 +1072,9 @@ def find_skeleton(segment_image,
                     main_trunk.append([main_points[idx+1], main_points[idx]])
             
             main_trunks.append(main_trunk)
-            
+            line_weights.append(path_weights)
+
         common_paths = []
-        differ_points = []
 
         # Convert each sublist to sets for easier comparison
         set1 = {tuple(sublist) for sublist in main_trunks[0]}
@@ -987,65 +1083,309 @@ def find_skeleton(segment_image,
         # Find the common 2-element lists
         common_paths = set1.intersection(set2)
         common_paths = [list(sublist) for sublist in common_paths]
-        differ_path1s = set1 - set2
-        differ_path1s = [list(sublist) for sublist in differ_path1s]
-        differ_path2s = set2 - set1
-        differ_path2s = [list(sublist) for sublist in differ_path2s]
-        undefined_paths = []
-    
-        path1_points = list(set([item for sublist in main_trunks[0] for item in sublist]))
-        path2_points = list(set([item for sublist in main_trunks[1] for item in sublist]))
+        left_paths = set1 - set2
+        left_paths = [list(sublist) for sublist in left_paths]
+        right_paths = set2 - set1
+        right_paths = [list(sublist) for sublist in right_paths]
 
-        differ_point1s = set(path1_points) - set(path2_points)
-        differ_point1s = list(differ_point1s)
-        differ_point2s = set(path2_points) - set(path1_points)
-        differ_point2s = list(differ_point2s)
+        loop = 0
+        while (len(left_paths) + len(right_paths) + len(common_paths) < len(edges) and loop <= 100):
+            loop += 1
+            common_points = list(set([item for sublist in common_paths for item in sublist]))
+            left_points = list(set([item for sublist in left_paths for item in sublist]))
+            right_points = list(set([item for sublist in right_paths for item in sublist]))
+            diff_left_points = set(left_points) - set(right_points) - set(common_points)
+            diff_left_points = list(diff_left_points)
+            diff_right_points = set(right_points) - set(left_points) - set(common_points)
+            diff_right_points = list(diff_right_points)
+            
+            new_left_paths = find_rest_paths(edges, diff_left_points, left_paths)
+            new_right_paths = find_rest_paths(edges, diff_right_points, right_paths)   
 
-        new_path1s, new_point1s = find_rest_paths(edges, differ_point1s, main_trunks[0])
-        new_path2s, new_point2s = find_rest_paths(edges, differ_point2s, main_trunks[1])   
+            left_paths = set(map(tuple, left_paths + new_left_paths))
+            left_paths = [list(sublist) for sublist in left_paths]
+            right_paths = set(map(tuple, right_paths + new_right_paths))
+            right_paths = [list(sublist) for sublist in right_paths]
 
-        differ_path1s = set(map(tuple, differ_path1s + new_path1s))
-        differ_path1s = [list(sublist) for sublist in differ_path1s]
-        differ_path2s = set(map(tuple, differ_path2s + new_path2s))
-        differ_path2s = [list(sublist) for sublist in differ_path2s]
+            diff_left_points = list(set([item for sublist in left_paths for item in sublist]))
+            diff_right_points = list(set([item for sublist in right_paths for item in sublist]))
+         
+            undefined_paths = []
+            for edge in edges:
+                if list_not_in_lists(edge, common_paths) and list_not_in_lists(edge, left_paths) and list_not_in_lists(edge, right_paths):
+                    undefined_paths.append(edge)
 
-        differ_point1s = list(set([item for sublist in differ_path1s for item in sublist]))
-        differ_point2s = list(set([item for sublist in differ_path2s for item in sublist]))
 
-        for edge in edges:
-            if list_not_in_lists(edge, common_paths) and list_not_in_lists(edge, differ_path1s) and list_not_in_lists(edge, differ_path2s):
-                undefined_paths.append(edge)
+            undefined_points = list(set([item for sublist in undefined_paths for item in sublist]))
+            suspected_points = {}
 
-        undefined_points = list(set([item for sublist in undefined_paths for item in sublist]))
-        common_points = list(set([item for sublist in common_paths for item in sublist]))
+            for point in junction_points:
+                if (point in undefined_points) and ((point in diff_left_points) or (point in diff_right_points) or (point in common_points)):
+                    suspected_points[point] = {}
 
-        print(differ_point1s)
-        print(differ_point2s)
-        print(undefined_points)
+                    for edge in edges:
+                        if point == edge[0]:
+                            point_1 = edge[0]
+                            point_2 = edge[1]
+                        elif point == edge[1]:
+                            point_1 = edge[1]
+                            point_2 = edge[0]
+                        else:
+                            continue
 
-        for point in junction_points:
-            if (point in undefined_points) and ((point in differ_point1s) or (point in differ_point2s) or (point in common_points)):
-                print(point)
+                        w = 0
+                        if edge in common_paths:
+                            w = 0
+                        elif edge in left_paths:
+                            w = 1
+                        elif edge in right_paths:
+                            w = 2
+                        else:
+                            max_w = 0
+                            w1 = 0
+                            w2 = 0
 
-        line_groups = [common_paths, differ_path2s, differ_path1s, undefined_paths]
-        line_colors = ['black', 'blue', 'green', 'orange']
+                            edge_key = tuple(edge)
+                            if edge_key in line_weights[0]:
+                                w1 = line_weights[0][edge_key]
+                            if edge_key in line_weights[1]:
+                                w2 = line_weights[1][edge_key]
+                            
+                            max_w = max(w1, w2)
 
-        # Create traces for each line
+                            if max_w == 1:
+                                w = -1
+                            else:
+                                w = 3
+
+                        suspected_points[point][point_2] = w
+
+            for key, sub_dict in suspected_points.items():
+                found_one = False
+                found_two = False
+                found_zero = False
+                zero_count = 0
+                
+                check_edges = []
+                
+                for sub_key, value in sub_dict.items():
+                    if value == 1:
+                        found_one = True
+                        one_key = sub_key
+                    elif value == 2:
+                        found_two = True
+                        two_key = sub_key
+                    elif value == 0:
+                        found_zero = True
+                        zero_count += 1
+                        zero_key = sub_key
+                    else:
+                        check_edges.append(sub_key)
+
+                if found_one and found_two:
+                    principal_vector_1 = skeleton_points[key] - skeleton_points[one_key]
+                    principal_vector_2 = skeleton_points[key] - skeleton_points[two_key]
+                    other_vectors = [skeleton_points[key] - skeleton_points[point] for point in check_edges]
+                    left_index, right_index = split_direction_2([principal_vector_1, principal_vector_2], other_vectors)
+                    left_point = check_edges[left_index]
+                    right_point = check_edges[right_index]
+
+                    if key < left_point:
+                        path1 = [key, left_point]
+                    else:
+                        path1 = [left_point, key]
+
+                    if key < right_point:
+                        path2 = [key, right_point]
+                    else:
+                        path2 = [right_point, key]
+
+                    left_paths = set(map(tuple, left_paths + [path1]))
+                    left_paths = [list(sublist) for sublist in left_paths]
+                    right_paths = set(map(tuple, right_paths + [path2]))
+                    right_paths = [list(sublist) for sublist in right_paths]
+
+                elif found_zero and zero_count == 1:
+                    principal_vector = skeleton_points[zero_key] - skeleton_points[key]
+                    other_vectors = [skeleton_points[key] - skeleton_points[point] for point in check_edges]
+                    left_index, right_index = split_direction_1(principal_vector, other_vectors)
+
+                    left_point = check_edges[left_index]
+                    right_point = check_edges[right_index]
+
+                    if key < left_point:
+                        path1 = [key, left_point]
+                    else:
+                        path1 = [left_point, key]
+
+                    if key < right_point:
+                        path2 = [key, right_point]
+                    else:
+                        path2 = [right_point, key]
+
+                    left_paths = set(map(tuple, left_paths + [path1]))
+                    left_paths = [list(sublist) for sublist in left_paths]
+                    right_paths = set(map(tuple, right_paths + [path2]))
+                    right_paths = [list(sublist) for sublist in right_paths]
+                else:
+                    for point in check_edges:
+                        if sub_dict[point] == -1:
+                            distance_1 = np.linalg.norm(np.array(skeleton_points[point]) - np.array(skeleton_points[aca_endpoints[0]]))
+                            distance_2 = np.linalg.norm(np.array(skeleton_points[point]) - np.array(skeleton_points[aca_endpoints[1]]))
+                            if distance_1 < distance_2:
+                                if key < point:
+                                    path = [key, point]
+                                else:
+                                    path = [point, key]
+                                left_paths = set(map(tuple, left_paths + [path]))
+                                left_paths = [list(sublist) for sublist in left_paths]
+                            else:
+                                if key < point:
+                                    path = [key, point]
+                                else:
+                                    path = [point, key]
+                                right_paths = set(map(tuple, right_paths + [path]))
+                                right_paths = [list(sublist) for sublist in right_paths]
+                        else:
+                            if key < point:
+                                path = [key, point]
+                            else:
+                                path = [point, key]
+                            common_paths.append(path)
+                            common_paths = [list(sublist) for sublist in common_paths]
+        
+        # loop = 0
+        # stop_left_paths = []
+        # stop_right_paths = []
+
+        # while len(common_paths) and loop < 20:
+        #     loop += 1
+        #     remove_idx = []
+
+        #     for idx, path in enumerate(common_paths):
+        #         print('Before path: ', path)
+        #         point_1 = path[0]
+        #         point_2 = path[1]
+
+        #         touch_point = point_1
+        #         neighbors = find_neighbors(point_1, left_paths, right_paths, connected_lines, stop_left_paths, stop_right_paths)
+                
+        #         if neighbors is None:
+        #             touch_point = point_2
+        #             neighbors = find_neighbors(point_2, left_paths, right_paths, connected_lines, stop_left_paths, stop_right_paths)
+                    
+        #             if neighbors is None:
+        #                 continue
+
+        #         left_point, right_point = find_p4_p5(
+        #             skeleton_points[neighbors[0]['point']], 
+        #             skeleton_points[neighbors[1]['point']], 
+        #             skeleton_points[touch_point])
+
+        #         # print(skeleton_points[touch_point], skeleton_points[neighbors[0]['point']], skeleton_points[neighbors[1]['point']], left_point, right_point )
+                
+        #         p1_index = skeleton_points.shape[0]
+        #         p2_index = p1_index + 1
+
+        #         skeleton_points = np.vstack([skeleton_points, left_point])
+        #         skeleton_points = np.vstack([skeleton_points, right_point])
+
+        #         left_path = left_paths[neighbors[0]['path']]
+        #         right_path = right_paths[neighbors[1]['path']]
+        #         left_connected_line = connected_lines[neighbors[0]['connected_line']]
+        #         right_connected_line = connected_lines[neighbors[1]['connected_line']]
+
+        #         next_point = None
+        #         common_connected_index = None
+        #         for k, connected_line in enumerate(connected_lines):
+        #             if (connected_line[0] == point_1 and connected_line[-1] == point_2) or (connected_line[0] == point_2 and connected_line[-1] == point_1):
+        #                 if connected_line[0] == touch_point:
+        #                     next_point = connected_line[1]
+        #                     common_connected_index = k
+        #                     break
+        #                 elif connected_line[-1] == touch_point:
+        #                     next_point = connected_line[-2]
+        #                     common_connected_index = k
+        #                     break
+
+        #         if next_point and common_connected_index:
+        #             common_connected_line = connected_lines[common_connected_index]
+        #             print(point_1, point_2, touch_point, next_point, common_connected_line)
+
+        #             # print('Before left: ', left_path, left_connected_line)
+
+        #             if left_path[0] == touch_point:
+        #                 left_path[0] = next_point
+        #             elif left_path[-1] == touch_point:
+        #                 left_path[-1] = next_point
+                    
+
+        #             if right_path[0] == touch_point:
+        #                 right_path[0] = next_point
+        #             elif right_path[-1] == touch_point:
+        #                 right_path[-1] = next_point
+
+        #             if left_connected_line[0] == touch_point:
+        #                 left_connected_line[0] = p1_index
+        #                 left_connected_line.insert(0, next_point)
+        #             elif left_connected_line[-1] == touch_point:
+        #                 left_connected_line[-1] = p1_index
+        #                 left_connected_line.append(next_point)
+
+        #             if right_connected_line[0] == touch_point:
+        #                 right_connected_line[0] = p2_index
+        #                 right_connected_line.insert(0, next_point)
+        #             elif right_connected_line[-1] == touch_point:
+        #                 right_connected_line[-1] = p2_index
+        #                 right_connected_line.append(next_point)
+
+        #             # print('After left: ', left_path, left_connected_line)
+
+        #             if touch_point == point_1:
+        #                 if next_point == point_2:
+        #                     stop_left_paths.append(neighbors[0]['path'])
+        #                     stop_right_paths.append(neighbors[1]['path'])
+        #                     del common_paths[idx]
+        #                 else:
+        #                     path[0] = next_point
+        #             elif touch_point == point_2:
+        #                 if next_point == point_1:
+        #                     stop_left_paths.append(neighbors[0]['path'])
+        #                     stop_right_paths.append(neighbors[1]['path'])
+        #                     del common_paths[idx]
+        #                 else:
+        #                     path[1] = next_point
+
+        #             if common_connected_line[0] == touch_point:
+        #                 common_connected_line.pop(0)
+
+        #             elif common_connected_line[-1] == touch_point:
+        #                 common_connected_line.pop(-1)
+
+        #             if len(common_connected_line) == 1 or len(common_connected_line) == 0:
+        #                 del connected_lines[common_connected_index]
+                
+            # print(skeleton_points[touch_point], left_point, right_point)
+
+        line_groups = [common_paths, right_paths, left_paths]
+        line_colors = ['black', 'blue', 'green']
         line_traces = []
 
         for i, line_group in enumerate(line_groups):
             for line in line_group:
-                color = line_colors[i]
-                x_vals = [skeleton_points[point][0] for point in line]
-                y_vals = [skeleton_points[point][1] for point in line]
-                z_vals = [skeleton_points[point][2] for point in line]
-                trace = go.Scatter3d(x=x_vals, y=y_vals, z=z_vals, 
-                                        mode='lines', 
-                                        line=dict(
-                                            color=color
-                                        ), 
-                                    )
-                line_traces.append(trace)
+                for connected_line in connected_lines:
+                    if (line[0] in connected_line and line[-1] in connected_line):
+                        color = line_colors[i]
+                        x_vals = [skeleton_points[point][0] for point in connected_line]
+                        y_vals = [skeleton_points[point][1] for point in connected_line]
+                        z_vals = [skeleton_points[point][2] for point in connected_line]
+                        trace = go.Scatter3d(x=x_vals, y=y_vals, z=z_vals, 
+                                                mode='lines', 
+                                                line=dict(
+                                                    color=color
+                                                ), 
+                                            )
+                        line_traces.append(trace)
 
     # lines_2 = []
     # for line in connected_lines:
@@ -1131,7 +1471,7 @@ def find_skeleton(segment_image,
 
     # fig_1 = go.Figure(data=[point_trace_0], layout=layout)
     # fig_1.show()
-    fig_2 = go.Figure(data=[point_trace_2, point_trace_3]+line_traces, layout=layout)
+    fig_2 = go.Figure(data=[point_trace_3]+line_traces, layout=layout)
     fig_2.show()
 
     return
