@@ -16,8 +16,127 @@ from scipy import ndimage
 import json
 import heapq
 import copy
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+import cv2
+
+def find_centerpoints(image):
+    # Convert the image to uint8 and scale it to 0-255 range
+    scaled_image = (image * 255).astype(np.uint8)
+
+    # Threshold the image to separate the two regions
+    threshold_value = 0.5
+    binary_image = scaled_image > threshold_value
+
+    # Find contours in the binary image
+    labeled_image = measure.label(binary_image)
+    regions = measure.regionprops(labeled_image)
+
+    # Filter regions based on area to remove noise
+    min_area = 10  # Adjust as needed
+    valid_regions = [region for region in regions if region.area > min_area]
+
+    # Extract center points of valid regions
+    center_points = [(int(region.centroid[1]), int(region.centroid[0])) for region in valid_regions]
+
+    return center_points
 
 # Nearest neighbor algorithm
+def bresenham_3d(point1, point2):
+    x1, y1, z1 = point1
+    x2, y2, z2 = point2
+    dx = abs(x2 - x1)
+    dy = abs(y2 - y1)
+    dz = abs(z2 - z1)
+    sx = 1 if x1 < x2 else -1
+    sy = 1 if y1 < y2 else -1
+    sz = 1 if z1 < z2 else -1
+    points = []
+    error1 = dy - dx
+    error2 = dz - dx
+    while x1 != x2 or y1 != y2 or z1 != z2:
+        points.append((x1, y1, z1))
+        if 2 * error1 > -dx:
+            error1 -= dy
+            x1 += sx
+        if 2 * error2 > -dx:
+            error2 -= dz
+            z1 += sz
+        if 2 * error1 < dz:
+            error1 += dx
+            y1 += sy
+        if 2 * error2 < dy:
+            error2 += dx
+            z1 += sz
+    points.append((x2, y2, z2))
+    return points
+
+def find_intersection_point(point1, point2, slice_coord, axis):
+    # Convert points to arrays
+    point1 = np.array(point1)
+    point2 = np.array(point2)
+    
+    # Calculate direction vector of the line connecting the two points
+    direction_vector = point2 - point1
+    
+    # Calculate the parameter t for the intersection point
+    t = (slice_coord[axis] - point1[axis]) / direction_vector[axis]
+    
+    # Calculate the intersection point
+    intersection_point = point1 + t * direction_vector
+    intersection_point = np.round(intersection_point).astype(int)
+    
+    return intersection_point.tolist()
+
+def find_square_region(cube_size, intersection_point, square_edge, axis, i):
+    # Calculate the boundaries of the square region
+    half_edge = square_edge // 2
+    min_boundaries = np.maximum(intersection_point - half_edge, [0, 0, 0])
+    max_boundaries = np.minimum(intersection_point + half_edge, cube_size)
+    
+    # Create a mask to select the square region
+    mask = np.zeros(cube_size, dtype=bool)
+
+    if axis == 0:
+        mask[i, min_boundaries[1]:max_boundaries[1], min_boundaries[2]:max_boundaries[2]] = True
+    elif axis == 1:
+        mask[min_boundaries[0]:max_boundaries[0], i, min_boundaries[2]:max_boundaries[2]] = True
+    else:
+        mask[min_boundaries[0]:max_boundaries[0], min_boundaries[1]:max_boundaries[1], i] = True
+
+    return mask
+
+def find_slices_perpendicular_to_line(cube_size, point1, point2, square_edge):
+    # Convert points to arrays
+    point1 = np.array(point1)
+    point2 = np.array(point2)
+
+    # Calculate direction vector of the line connecting the two points
+    direction_vector = point2 - point1
+    
+    # Determine the axis along which the line lies
+    axis = np.argmax(np.abs(direction_vector))
+    
+    # Calculate the increment along the axis for each step in the line
+    increment = 1
+
+    # Determine the slices along the axis of the line
+    start_slice = min(point1[axis], point2[axis])
+    end_slice = max(point1[axis], point2[axis])
+
+    # Select slices perpendicular to the line
+    perpendicular_slices = []
+
+    for i in range(start_slice, end_slice + increment, increment):
+        intersection_point = find_intersection_point(point1, point2, [0, 0, i], axis)
+        # Find the square region centered at the intersection point
+        square_region = find_square_region(cube_size, np.array(intersection_point), square_edge, axis, i)
+        
+        # Append slice and square region to the list
+        perpendicular_slices.append(square_region)
+    
+    return perpendicular_slices, axis, start_slice, end_slice
+
 def nearest_neighbor(points):
     distances = distance_matrix(points, points)
     n = len(points)
@@ -922,6 +1041,58 @@ def find_p4_p5(p1, p2, p3):
 
     return p4, p5
 
+def interpolate_center_path(line1, line2, num_points):
+    # Get the shorter and longer lines
+    shorter_line = line1 if len(line1) < len(line2) else line2
+    longer_line = line1 if len(line1) >= len(line2) else line2
+
+    # Interpolate points between corresponding points on the shorter line and their corresponding points on the longer line
+    center_path = []
+    for i in range(len(shorter_line)):
+        # Linear interpolation between points
+        interpolated_points = np.linspace(shorter_line[i], longer_line[i], num_points + 2)
+        interpolated_points = np.around(interpolated_points).astype(int)[1:-1]
+        center_path.extend(interpolated_points)
+
+    # If the longer line has more points, interpolate remaining points
+    if len(longer_line) > len(shorter_line):
+        remaining_points = longer_line[len(shorter_line):]
+        interpolated_points = np.linspace(remaining_points[0], remaining_points[-1], num_points + 2)
+        interpolated_points = np.around(interpolated_points).astype(int)[1:-1]
+        center_path.extend(interpolated_points)
+
+    return center_path
+
+def select_slice(preprocessed_data, index, axis, min_coords, max_coords):
+    # Select the slice along the specified axis
+    if axis == 0:
+        slice_data = preprocessed_data[index, min_coords[1]:max_coords[1], min_coords[2]:max_coords[2]]
+    elif axis == 1:
+        slice_data = preprocessed_data[ min_coords[0]:max_coords[0], index, min_coords[2]:max_coords[2] ]
+    else:
+        slice_data = preprocessed_data[min_coords[0]:max_coords[0], min_coords[1]:max_coords[1], index]
+    
+    return slice_data
+
+def find_max_count_positions(max_count):
+    max_count_positions = []
+    max_count_value = np.max(max_count)
+
+    # # Iterate over each position in the max_count array
+    # for x1 in range(max_count.shape[0]):
+    #     for y1 in range(max_count.shape[1]):
+    #         # Check if the count at this position is equal to the maximum count
+    #         if max_count[x1][y1] == max_count_value:
+    #             # Iterate over neighboring positions
+    #             for x2 in range(max(0, x1-1), min(max_count.shape[0], x1+2)):
+    #                 for y2 in range(max(0, y1-1), min(max_count.shape[1], y1+2)):
+    #                     # Check if the distance between the positions is greater than 1
+    #                     if np.sqrt((x1 - x2)**2 + (y1 - y2)**2) > 1:
+    #                         max_count_positions.append(((x1, y1), (x2, y2)))
+
+    print(max_count_value)
+    return max_count_positions
+
 def find_skeleton(segment_image,
                   original_image=None, 
                   index=[], 
@@ -967,6 +1138,7 @@ def find_skeleton(segment_image,
     labels, counts = np.unique(labeled_array[labeled_array != 0], return_counts=True)
     max_count_label = labels[np.argmax(counts)]
     selected_data[(labeled_array != 0) & (labeled_array != max_count_label)] = 0
+    verts, faces, normals, _ = measure.marching_cubes(selected_data, level=0.5, spacing=[1, 1, 1])
 
     artery_points_old = np.argwhere(mask_data != 0)
     artery_points = np.argwhere(mask_data != 0)*voxel_sizes
@@ -975,12 +1147,123 @@ def find_skeleton(segment_image,
     skeleton_points = np.argwhere(skeleton != 0)
 
     end_points, junction_points, neighbor_distances = find_graph(skeleton_points)
-
     lines = []
     line_values = []
     line_colors = []
 
     if 5 in index or 6 in index:
+        point_1 = [138, 216, 315]
+        point_2 = [141, 201, 287]
+        cube_size = selected_data.shape
+
+        slices, axis, start_point, end_point = find_slices_perpendicular_to_line(cube_size, point_1, point_2, 18)
+        slice_points = []
+        center_points = []
+
+        for index, slice in enumerate(slices):
+            # # Visualize skeleton points 
+            slice_point = np.argwhere(slice == True)
+
+            slice_points.append(go.Scatter3d(
+                x=slice_point[:, 0],
+                y=slice_point[:, 1],
+                z=slice_point[:, 2],
+                mode='markers',
+                marker=dict(
+                    size=1,
+                    color='orange',
+                ),
+                name='Points',
+            ))
+
+            min_coords = np.min(np.argwhere(slice), axis=0)
+            max_coords = np.max(np.argwhere(slice), axis=0)
+            slice_value_1 = select_slice(preprocessed_data, start_point + index, axis, min_coords, max_coords)
+            slice_value_2 = select_slice(original_data, start_point + index, axis, min_coords, max_coords)
+
+            normalized_data = (slice_value_2 - slice_value_2.min()) / (slice_value_2.max() - slice_value_2.min())
+            # Define neighbor offsets
+            offsets = [(-1, -1), (-1, 0), (-1, 1),
+                    (0, -1),          (0, 1),
+                    (1, -1),  (1, 0),  (1, 1)]
+
+            # Iterate over each pixel
+            max_count = np.zeros((normalized_data.shape[0], normalized_data.shape[1])) 
+
+            for i in range(1, normalized_data.shape[0] - 1):
+                for j in range(1, normalized_data.shape[1] - 1):
+                    # Get the values of the pixel and its neighbors
+                    neighbors_values = [normalized_data[i+ni, j+nj] for ni, nj in offsets]
+                    # Find the index of the neighbor with the highest value
+                    max_neighbor_index = np.argmax(neighbors_values)
+                    max_neighbor_position = (i + offsets[max_neighbor_index][0], j + offsets[max_neighbor_index][1])
+                    
+                    x_pos = max_neighbor_position[0]
+                    y_pos = max_neighbor_position[1]
+
+                    max_count[x_pos][y_pos] += 1
+                    
+            max_indices = np.argsort(max_count, axis=None)[-4:]
+            # Get the corresponding values in normalized_data
+            max_indices_2d = np.unravel_index(max_indices, max_count.shape)
+            max_values = normalized_data[max_indices_2d]
+
+            print(max_count)
+
+            # Sort the indices based on the corresponding values in normalized_data
+            sorted_indices = np.argsort(max_values, axis=None)
+
+            # Select the top 2 indices
+            top_indices = sorted_indices[-2:]
+
+            # Keep only the corresponding indices and values
+            max_indices_2d = np.array(max_indices_2d)[:, top_indices]
+
+            max_positions_pairs = list(zip(max_indices_2d[1], max_indices_2d[0]))
+
+            for pair in max_positions_pairs:
+                if axis == 0:
+                    point = [ start_point + index, min_coords[1] + pair[0], min_coords[2] + pair[1]]
+                elif axis == 1:
+                    point = [min_coords[0] + pair[0], start_point +  index, min_coords[2] +  pair[1]]
+                else:
+                    point = [min_coords[0] + pair[1], min_coords[1] + pair[0], start_point +  index]
+            
+                center_points.append(point)
+
+            # Visualization
+
+            plt.figure(figsize=(10, 5))
+
+            # Plot the slice data
+            plt.subplot(1, 2, 1)
+            plt.imshow(slice_value_1, cmap='viridis')
+            plt.title('Slice Value 1')
+            plt.colorbar()
+
+            # Plot the gradient vectors
+            plt.subplot(1, 2, 2)
+            plt.imshow(slice_value_2, cmap='viridis')
+            plt.title('Gradient Vectors')
+            plt.colorbar()
+
+            plt.show()
+
+            # print(slice_value[0])
+
+        center_points = np.array(center_points)
+        cluster_points = go.Scatter3d(
+                x=center_points[:, 0],
+                y=center_points[:, 1],
+                z=center_points[:, 2],
+                mode='markers',
+                marker=dict(
+                    size=3,
+                    color='black',
+                ),
+                name='Points',
+            )
+
         aca_endpoints = [15, 701]
         directions = ['left', 'right']
         end_point_1, end_point_2 = skeleton_points[aca_endpoints[0]], skeleton_points[aca_endpoints[1]]
@@ -1000,7 +1283,7 @@ def find_skeleton(segment_image,
                         neighbor_distances[line[i+1]][line[i]] = 0
 
         junction_points, new_neighbor_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
-
+        
         edges = []
         for i in range(skeleton_points.shape[0]):
             for j in range(i+1, skeleton_points.shape[0]):
@@ -1008,6 +1291,70 @@ def find_skeleton(segment_image,
                     lines.append([skeleton_points[i], skeleton_points[j]])
                     edges.append([i, j])
 
+        duplicate_lines = {}
+        for line in connected_lines:
+            if line[0] != line[-1]:
+                point_1 = line[0]
+                point_2 = line[-1]
+
+                if point_1 > point_2:
+                    tmp = point_1
+                    point_1 = point_2
+                    point_2 = tmp
+                    line.reverse()
+
+                if point_1 not in duplicate_lines:
+                    duplicate_lines[point_1] = {}
+                
+                if point_2 not in duplicate_lines[point_1]:
+                    duplicate_lines[point_1][point_2] = []
+
+
+                duplicate_lines[point_1][point_2].append(line)
+
+        new_connected_lines = []
+
+        for key, value in duplicate_lines.items():
+            for sub_key, sub_value in value.items():
+                if len(sub_value) == 2:
+                    line_1 = sub_value[0]
+                    line_2 = sub_value[1]
+                    interpolate_line = interpolate_center_path(skeleton_points[line_1], skeleton_points[line_2], 1)
+
+                    removed_idx = []
+                    for i, line in enumerate(connected_lines):
+                        if (line[0] == key and line[-1] == sub_key) or (line[-1] == key and line[0] == sub_key):
+                            removed_idx.append(i)
+                        
+                    removed_idx.sort(reverse=True)
+                    for index in removed_idx:
+                        connected_lines.pop(index)
+
+                    new_line = [key]
+                    for i in range(1, len(interpolate_line)-1):
+                        new_point = interpolate_line[i]
+                        new_index = skeleton_points.shape[0]
+                        skeleton_points = np.vstack([skeleton_points, new_point])
+                        new_line.append(new_index)
+
+                    new_line.append(sub_key)
+                    connected_lines.append(new_line)
+
+                    removed_edges = []
+                    for i, edge in enumerate(edges):
+                        edge_1 = edge[0]
+                        edge_2 = edge[-1]
+
+                        if (edge_1 in line_1 and edge_2 in line_1) or (edge_1 in line_2 and edge_2 in line_2):
+                            removed_edges.append(i)
+
+                    removed_edges.sort(reverse=True)
+                    for index in removed_edges:
+                        edges.pop(index)
+                    
+                    edges.append([key, sub_key])
+
+        
         main_trunks = []
         line_weights = []
         for i, endpoint in enumerate(aca_endpoints):
@@ -1258,12 +1605,11 @@ def find_skeleton(segment_image,
         # stop_left_paths = []
         # stop_right_paths = []
 
-        # while len(common_paths) and loop < 20:
+        # while len(common_paths) and loop < 150:
         #     loop += 1
         #     remove_idx = []
 
         #     for idx, path in enumerate(common_paths):
-        #         print('Before path: ', path)
         #         point_1 = path[0]
         #         point_2 = path[1]
 
@@ -1310,9 +1656,6 @@ def find_skeleton(segment_image,
 
         #         if next_point and common_connected_index:
         #             common_connected_line = connected_lines[common_connected_index]
-        #             print(point_1, point_2, touch_point, next_point, common_connected_line)
-
-        #             # print('Before left: ', left_path, left_connected_line)
 
         #             if left_path[0] == touch_point:
         #                 left_path[0] = next_point
@@ -1364,9 +1707,8 @@ def find_skeleton(segment_image,
 
         #             if len(common_connected_line) == 1 or len(common_connected_line) == 0:
         #                 del connected_lines[common_connected_index]
-                
-            # print(skeleton_points[touch_point], left_point, right_point)
 
+        # print(new_connected_lines)
         line_groups = [common_paths, right_paths, left_paths]
         line_colors = ['black', 'blue', 'green']
         line_traces = []
@@ -1382,10 +1724,12 @@ def find_skeleton(segment_image,
                         trace = go.Scatter3d(x=x_vals, y=y_vals, z=z_vals, 
                                                 mode='lines', 
                                                 line=dict(
-                                                    color=color
+                                                    color=color,
+                                                    width=5
                                                 ), 
                                             )
                         line_traces.append(trace)
+
 
     # lines_2 = []
     # for line in connected_lines:
@@ -1414,6 +1758,18 @@ def find_skeleton(segment_image,
     #     ),
     #     name='Points'
     # )
+
+    border_point = go.Scatter3d(
+        x=verts[:, 0],
+        y=verts[:, 1],
+        z=verts[:, 2],
+        mode='markers',
+        marker=dict(
+            size=1,
+            color='black',
+        ),
+        name='Points'
+    )
 
     # Visualize skeleton points 
     point_trace_1 = go.Scatter3d(
@@ -1471,7 +1827,7 @@ def find_skeleton(segment_image,
 
     # fig_1 = go.Figure(data=[point_trace_0], layout=layout)
     # fig_1.show()
-    fig_2 = go.Figure(data=[point_trace_3]+line_traces, layout=layout)
+    fig_2 = go.Figure(data=[border_point, point_trace_2, point_trace_3, cluster_points]+line_traces, layout=layout)
     fig_2.show()
 
     return
@@ -1615,7 +1971,7 @@ if __name__ == "__main__":
     # Load the NIfTI image
     segment_image = nib.load(segment_file_path)
     original_image = nib.load(original_file_path)
-    intensity_threshold_1 = 0.000001
+    intensity_threshold_1 = 0.2
     intensity_threshold_2 = 0.1
     gaussian_sigma=2
     distance_threshold=20
