@@ -73,11 +73,15 @@ def auto_select_slices(cube_size, path_index, skeleton_points, square_edge, comm
     increment = 1
 
     # Determine the slices along the axis of the line
-    start_point = min(point1[axis], point2[axis])
-    end_point = max(point1[axis], point2[axis])
+    if point1[axis] > point2[axis]:
+        increment = -1
+    
+    # start_point = min(point1[axis], point2[axis])
+    # end_point = max(point1[axis], point2[axis])
     perpendicular_slices = []
 
-    for i in range(start_point, end_point + increment, increment):
+    print(point1[axis], point2[axis])
+    for i in range(point1[axis], point2[axis] + increment, increment):
         intersection_point = find_intersection_point(point1, point2, [i, i, i], axis)
         # Find the square region centered at the intersection point
         square_region = find_square_region(cube_size, np.array(intersection_point), square_edge, axis, i)
@@ -87,7 +91,7 @@ def auto_select_slices(cube_size, path_index, skeleton_points, square_edge, comm
     return {
         'axis': axis,
         'slices': perpendicular_slices,
-        'head_points': [start_point, end_point]
+        'head_points': [point1[axis], point2[axis]]
     }
     
 def find_extend_paths(path_index, common_paths):
@@ -131,6 +135,7 @@ def find_split_points(common_paths, original_data, skeleton_points):
         result = auto_select_slices(cube_size, path_index, skeleton_points, 16, common_paths)
         axis = result['axis']
         start_point, end_point = result['head_points']
+        
         slices = result['slices']
         split_points = []
         offsets = [(-1, -1), (-1, 0), (-1, 1),
@@ -138,13 +143,18 @@ def find_split_points(common_paths, original_data, skeleton_points):
                         (1, -1),  (1, 0),  (1, 1)]
         
         for index, slice in enumerate(slices):
+            if start_point > end_point:
+                increment = -1*index
+            else:
+                increment = index
+                
             boundaries = np.argwhere(slice==True)
             if boundaries.shape[0]:
                 min_coords = np.min(np.argwhere(slice==True), axis=0)
                 max_coords = np.max(np.argwhere(slice==True), axis=0)
-                # segment_slice = select_slice(mask_data, start_point + index, axis, min_coords, max_coords)
-                # fixed_slice = select_slice(selected_data, start_point + index, axis, min_coords, max_coords)
-                intensity_slice = select_slice(original_data, start_point + index, axis, min_coords, max_coords)
+                # segment_slice = select_slice(mask_data, start_point + increment, axis, min_coords, max_coords)
+                # fixed_slice = select_slice(selected_data, start_point + increment, axis, min_coords, max_coords)
+                intensity_slice = select_slice(original_data, start_point + increment, axis, min_coords, max_coords)
                 normalized_data = (intensity_slice - intensity_slice.min()) / (intensity_slice.max() - intensity_slice.min())
                 
                 # Iterate over each pixel
@@ -172,13 +182,13 @@ def find_split_points(common_paths, original_data, skeleton_points):
                 for pair in max_positions_pairs:
                     if axis == 0:
                         point = [min_coords[1] + pair[0], min_coords[2] + pair[1]]
-                        voxel_point = [start_point + index, min_coords[1] + pair[0], min_coords[2] + pair[1]]
+                        voxel_point = [start_point + increment, min_coords[1] + pair[0], min_coords[2] + pair[1]]
                     elif axis == 1:
                         point = [min_coords[0] + pair[0], min_coords[2] + pair[1]]
                         voxel_point = [min_coords[0] + pair[0], start_point +  index, min_coords[2] +  pair[1]]
                     else:
                         point = [min_coords[0] + pair[0], min_coords[1] + pair[1]]
-                        voxel_point = [min_coords[0] + pair[0], min_coords[1] + pair[1], start_point +  index]
+                        voxel_point = [min_coords[0] + pair[0], min_coords[1] + pair[1], start_point + increment]
                 
                     split_points.append(voxel_point)
                 

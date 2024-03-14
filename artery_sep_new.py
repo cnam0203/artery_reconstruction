@@ -70,15 +70,23 @@ def reconstruct_surface(segment_image,
         common_paths, left_paths, right_paths, undefined_paths = find_branches(aca_endpoints, end_points, directions, skeleton_points, junction_points, edges)
         skeleton_points, split_groups = find_split_points(common_paths, original_data, skeleton_points)
         split_paths = connect_split_points(split_groups, skeleton_points)
-            
+        common_paths, left_paths, right_paths, connected_lines, defined_paths = connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points) 
+        print(defined_paths)
+        left_paths, right_paths, undefined_paths, connected_lines = connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points)
+        
     visualized_skeleton_points = generate_points(skeleton_points)
     visualized_end_points = generate_points(skeleton_points[end_points], 5, 'red')
     visualized_junction_points = generate_points(skeleton_points[junction_points], 5, 'green')
     visualized_direct_lines = []
     visualized_connected_lines = []
     
-    line_groups = [common_paths, right_paths, left_paths, undefined_paths]
-    line_colors = ['black', 'blue', 'green', 'orange']
+    # for line in connected_lines:
+    #     visualized_direct_lines.append(generate_lines(skeleton_points[[line[0], line[-1]]], 5))
+    #     for k in range(len(line)-1):
+    #         visualized_connected_lines.append(generate_lines(skeleton_points[[line[k], line[k+1]]]))
+    
+    line_groups = [right_paths, left_paths, undefined_paths]
+    line_colors = ['blue', 'green', 'orange']
     line_traces = []
 
     for i, line_group in enumerate(line_groups):
@@ -87,8 +95,13 @@ def reconstruct_surface(segment_image,
                 if (line[0] in connected_line and line[-1] in connected_line):
                     color = line_colors[i]
                     line_traces.append(generate_lines(skeleton_points[connected_line], 2, color))
+    
+    # visualized_split_points = []
+    # visualized_split_paths = []
+    # for group in split_groups:
+    #     visualized_split_points.append(generate_points(skeleton_points[group]))
         
-    show_figure([visualized_end_points, visualized_junction_points] + line_traces + visualized_split_points)
+    show_figure([visualized_end_points, visualized_junction_points] + line_traces)
     
     return
 

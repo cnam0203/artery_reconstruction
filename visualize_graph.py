@@ -53,7 +53,8 @@ def generate_points(points, point_size=2, point_color='black'):
             size=point_size,
             color=point_color
         ),
-        name='Points'
+        name='Points',
+        text=[f'Pos {i}' for i in range(points.shape[0])]
     )
     
 def generate_lines(lines, line_width=2, line_color='black'):
