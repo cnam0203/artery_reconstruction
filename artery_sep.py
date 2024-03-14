@@ -1135,97 +1135,97 @@ def find_skeleton(segment_image,
     line_colors = []
 
     if 5 in index or 6 in index:
-        point_1 = [141, 201, 287]
-        point_2 = [138, 216, 315]
-        differences = np.abs(np.array(point_1) - np.array(point_2))
-        cube_size = selected_data.shape
+        # point_1 = [141, 201, 287]
+        # point_2 = [138, 216, 315]
+        # differences = np.abs(np.array(point_1) - np.array(point_2))
+        # cube_size = selected_data.shape
 
-        result = auto_select_slices(cube_size, point_1, point_2, 14)
-        axis = result['axis']
+        # result = auto_select_slices(cube_size, point_1, point_2, 14)
+        # axis = result['axis']
 
-        if axis == 0:
-            axis_name = 'X'
-        elif axis == 1:
-            axis_name = 'Y'
-        else:
-            axis_name = 'Z'
+        # if axis == 0:
+        #     axis_name = 'X'
+        # elif axis == 1:
+        #     axis_name = 'Y'
+        # else:
+        #     axis_name = 'Z'
 
-        start_point, end_point = result['head_points']
-        slices = result['slices']
-        num_cols = 3
-        num_rows = math.ceil(len(slices)/3)
-        fig, axs = plt.subplots(num_rows, num_cols, figsize=(20, 15))
+        # start_point, end_point = result['head_points']
+        # slices = result['slices']
+        # num_cols = 3
+        # num_rows = math.ceil(len(slices)/3)
+        # fig, axs = plt.subplots(num_rows, num_cols, figsize=(20, 15))
 
 
-        for index, slice in enumerate(slices):
-            center_points = []
-            boundaries = np.argwhere(slice==True)
-            if boundaries.shape[0]:
-                min_coords = np.min(np.argwhere(slice==True), axis=0)
-                max_coords = np.max(np.argwhere(slice==True), axis=0)
-                segment_slice = select_slice(mask_data, start_point + index, axis, min_coords, max_coords)
-                intensity_slice = select_slice(original_data, start_point + index, axis, min_coords, max_coords)
-                fixed_slice = select_slice(selected_data, start_point + index, axis, min_coords, max_coords)
+        # for index, slice in enumerate(slices):
+        #     center_points = []
+        #     boundaries = np.argwhere(slice==True)
+        #     if boundaries.shape[0]:
+        #         min_coords = np.min(np.argwhere(slice==True), axis=0)
+        #         max_coords = np.max(np.argwhere(slice==True), axis=0)
+        #         segment_slice = select_slice(mask_data, start_point + index, axis, min_coords, max_coords)
+        #         intensity_slice = select_slice(original_data, start_point + index, axis, min_coords, max_coords)
+        #         fixed_slice = select_slice(selected_data, start_point + index, axis, min_coords, max_coords)
 
-                normalized_data = (intensity_slice - intensity_slice.min()) / (intensity_slice.max() - intensity_slice.min())
-                offsets = [(-1, -1), (-1, 0), (-1, 1),
-                        (0, -1),          (0, 1),
-                        (1, -1),  (1, 0),  (1, 1)]
+        #         normalized_data = (intensity_slice - intensity_slice.min()) / (intensity_slice.max() - intensity_slice.min())
+        #         offsets = [(-1, -1), (-1, 0), (-1, 1),
+        #                 (0, -1),          (0, 1),
+        #                 (1, -1),  (1, 0),  (1, 1)]
 
-                # Iterate over each pixel
-                max_count = np.zeros((normalized_data.shape[0], normalized_data.shape[1])) 
-                padded_data = np.pad(normalized_data, 1, mode='constant')
+        #         # Iterate over each pixel
+        #         max_count = np.zeros((normalized_data.shape[0], normalized_data.shape[1])) 
+        #         padded_data = np.pad(normalized_data, 1, mode='constant')
 
-                for i in range(1, normalized_data.shape[0] + 1):
-                    for j in range(1, normalized_data.shape[1] + 1):
-                        # Get the values of the pixel and its neighbors from the padded array
-                        neighbors_values = [padded_data[i + ni, j + nj] for ni, nj in offsets]
-                        # Find the index of the neighbor with the highest value
-                        max_neighbor_index = np.argmax(neighbors_values)
-                        max_neighbor_position = (i + offsets[max_neighbor_index][0], j + offsets[max_neighbor_index][1])
+        #         for i in range(1, normalized_data.shape[0] + 1):
+        #             for j in range(1, normalized_data.shape[1] + 1):
+        #                 # Get the values of the pixel and its neighbors from the padded array
+        #                 neighbors_values = [padded_data[i + ni, j + nj] for ni, nj in offsets]
+        #                 # Find the index of the neighbor with the highest value
+        #                 max_neighbor_index = np.argmax(neighbors_values)
+        #                 max_neighbor_position = (i + offsets[max_neighbor_index][0], j + offsets[max_neighbor_index][1])
                         
-                        x_pos = max_neighbor_position[0] - 1  # Adjust for padding
-                        y_pos = max_neighbor_position[1] - 1  # Adjust for padding
+        #                 x_pos = max_neighbor_position[0] - 1  # Adjust for padding
+        #                 y_pos = max_neighbor_position[1] - 1  # Adjust for padding
                         
-                        if normalized_data[x_pos][y_pos] > 0.4:
-                            max_count[x_pos][y_pos] += 1
+        #                 if normalized_data[x_pos][y_pos] > 0.4:
+        #                     max_count[x_pos][y_pos] += 1
                     
-                    max_indices = np.argsort(max_count, axis=None)[-2:]
-                    max_indices_2d = np.unravel_index(max_indices, max_count.shape)
-                    # max_positions_pairs = list(zip(max_indices_2d[0], max_indices_2d[1]))
+        #             max_indices = np.argsort(max_count, axis=None)[-2:]
+        #             max_indices_2d = np.unravel_index(max_indices, max_count.shape)
+        #             # max_positions_pairs = list(zip(max_indices_2d[0], max_indices_2d[1]))
                 
-                # for pair in max_positions_pairs:
-                #     if axis == 0:
-                #         # voxel_point = [start_point + index, min_coords[1] + pair[0], min_coords[2] + pair[1]]
-                #     elif axis == 1:
-                #         point = [min_coords[0] + pair[0], min_coords[2] + pair[1]]
-                #         # voxel_point = [min_coords[0] + pair[0], start_point +  index, min_coords[2] +  pair[1]]
-                #     else:
-                #         point = [min_coords[0] + pair[0], min_coords[1] + pair[1]]
-                #         # voxel_point = [min_coords[0] + pair[0], min_coords[1] + pair[1], start_point +  index]
+        #         # for pair in max_positions_pairs:
+        #         #     if axis == 0:
+        #         #         # voxel_point = [start_point + index, min_coords[1] + pair[0], min_coords[2] + pair[1]]
+        #         #     elif axis == 1:
+        #         #         point = [min_coords[0] + pair[0], min_coords[2] + pair[1]]
+        #         #         # voxel_point = [min_coords[0] + pair[0], start_point +  index, min_coords[2] +  pair[1]]
+        #         #     else:
+        #         #         point = [min_coords[0] + pair[0], min_coords[1] + pair[1]]
+        #         #         # voxel_point = [min_coords[0] + pair[0], min_coords[1] + pair[1], start_point +  index]
                 
-                #     center_points.append(point)
+        #         #     center_points.append(point)
 
-                # Plot the gradient vectors
-                segment_indices = np.argwhere(segment_slice == 1)
-                changed_indices = np.argwhere(fixed_slice == 1)
+        #         # Plot the gradient vectors
+        #         segment_indices = np.argwhere(segment_slice == 1)
+        #         changed_indices = np.argwhere(fixed_slice == 1)
 
-                row = math.ceil((index+1)/3) - 1
-                col = (index+1)%3 - 1
+        #         row = math.ceil((index+1)/3) - 1
+        #         col = (index+1)%3 - 1
 
-                axs[row, col].imshow(intensity_slice, cmap='viridis')
-                axs[row, col].scatter(max_indices_2d[1], max_indices_2d[0], color='red', marker='o')
+        #         axs[row, col].imshow(intensity_slice, cmap='viridis')
+        #         axs[row, col].scatter(max_indices_2d[1], max_indices_2d[0], color='red', marker='o')
                 
-                for idx in segment_indices:
-                    rect = plt.Rectangle((idx[1] - 0.5, idx[0] - 0.5), 1, 1, linewidth=2, edgecolor='blue', facecolor='none')
-                    axs[row, col].add_patch(rect)
+        #         for idx in segment_indices:
+        #             rect = plt.Rectangle((idx[1] - 0.5, idx[0] - 0.5), 1, 1, linewidth=2, edgecolor='blue', facecolor='none')
+        #             axs[row, col].add_patch(rect)
 
-                for idx in changed_indices:
-                    rect = plt.Rectangle((idx[1] - 0.5, idx[0] - 0.5), 1, 1, linewidth=0.5, edgecolor='red', facecolor='none')
-                    axs[row, col].add_patch(rect)
+        #         for idx in changed_indices:
+        #             rect = plt.Rectangle((idx[1] - 0.5, idx[0] - 0.5), 1, 1, linewidth=0.5, edgecolor='red', facecolor='none')
+        #             axs[row, col].add_patch(rect)
 
-                axs[row, col].axis('off')  # Hide axes
-                axs[row, col].set_title(f"{axis_name} - {start_point + index}")
+        #         axs[row, col].axis('off')  # Hide axes
+        #         axs[row, col].set_title(f"{axis_name} - {start_point + index}")
 
         # axe_slices = select_slices(cube_size, point_1, point_2, 14)
         # fig, axs = plt.subplots(3, np.max(differences)+1, figsize=(20, 15))
@@ -1304,8 +1304,8 @@ def find_skeleton(segment_image,
         #             axs[axe_index, index].axis('off')  # Hide axes
         #             axs[axe_index, index].set_title(f"{axis_name} - {start_point + index}")
 
-        plt.show()
-        return 
+        # plt.show()
+        # return 
 
             # print(slice_value[0])
 
@@ -1322,25 +1322,25 @@ def find_skeleton(segment_image,
         #         name='Points',
         #     )
 
-    #     aca_endpoints = [15, 701]
-    #     directions = ['left', 'right']
-    #     end_point_1, end_point_2 = skeleton_points[aca_endpoints[0]], skeleton_points[aca_endpoints[1]]
+        aca_endpoints = [15, 701]
+        directions = ['left', 'right']
+        end_point_1, end_point_2 = skeleton_points[aca_endpoints[0]], skeleton_points[aca_endpoints[1]]
 
-    #     v2 = end_point_1 - end_point_2
-    #     junction_points, neighbor_distances = remove_junction_points(neighbor_distances, junction_points, skeleton_points)
-    #     junction_points, new_neighbor_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
-    #     junction_points, new_neighbor_distances, remove_edges = remove_cycle_edges(skeleton_points, new_neighbor_distances, v2)
+        v2 = end_point_1 - end_point_2
+        junction_points, neighbor_distances = remove_junction_points(neighbor_distances, junction_points, skeleton_points)
+        junction_points, new_neighbor_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
+        junction_points, new_neighbor_distances, remove_edges = remove_cycle_edges(skeleton_points, new_neighbor_distances, v2)
 
-    #     for edge in remove_edges:
-    #         point_1 = edge[0]
-    #         point_2 = edge[1]
-    #         for line in connected_lines:
-    #             if (point_1 == line[0] or point_1 == line[-1]) and (point_2 == line[0] or point_2 == line[-1]):
-    #                 for i in range(len(line) - 1):
-    #                     neighbor_distances[line[i]][line[i+1]] = 0
-    #                     neighbor_distances[line[i+1]][line[i]] = 0
+        for edge in remove_edges:
+            point_1 = edge[0]
+            point_2 = edge[1]
+            for line in connected_lines:
+                if (point_1 == line[0] or point_1 == line[-1]) and (point_2 == line[0] or point_2 == line[-1]):
+                    for i in range(len(line) - 1):
+                        neighbor_distances[line[i]][line[i+1]] = 0
+                        neighbor_distances[line[i+1]][line[i]] = 0
 
-    #     junction_points, new_neighbor_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
+        junction_points, new_neighbor_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
         
     #     edges = []
     #     for i in range(skeleton_points.shape[0]):
@@ -1790,20 +1790,20 @@ def find_skeleton(segment_image,
     #                     line_traces.append(trace)
 
 
-    # # lines_2 = []
-    # # for line in connected_lines:
-    # #     for i in range(len(line)-1):
-    # #         lines_2.append([skeleton_points[line[i]], skeleton_points[line[i+1]]])
+    lines_2 = []
+    for line in connected_lines:
+        for i in range(len(line)-1):
+            lines_2.append([skeleton_points[line[i]], skeleton_points[line[i+1]]])
 
-    # # # Create traces for each line
-    # # line_traces_2 = []
-    # # for i, line in enumerate(lines_2):
-    # #     color = 'black'
-    # #     x_vals = [point[0] for point in line]
-    # #     y_vals = [point[1] for point in line]
-    # #     z_vals = [point[2] for point in line]
-    # #     trace = go.Scatter3d(x=x_vals, y=y_vals, z=z_vals, mode='lines', line=dict(color='green'))
-    # #     line_traces_2.append(trace)
+    # Create traces for each line
+    line_traces_2 = []
+    for i, line in enumerate(lines_2):
+        color = 'black'
+        x_vals = [point[0] for point in line]
+        y_vals = [point[1] for point in line]
+        z_vals = [point[2] for point in line]
+        trace = go.Scatter3d(x=x_vals, y=y_vals, z=z_vals, mode='lines', line=dict(color='green'))
+        line_traces_2.append(trace)
     # # # # Create traces
     # # # Visualize artery points 
     # # point_trace_0 = go.Scatter3d(
@@ -1844,52 +1844,52 @@ def find_skeleton(segment_image,
     #     text=[f'Point {i}' for i, point in enumerate(skeleton_points)]
     # )
     
-    # # Visualize junction points
-    # point_trace_2 = go.Scatter3d(
-    #     x=skeleton_points[junction_points, 0],
-    #     y=skeleton_points[junction_points, 1],
-    #     z=skeleton_points[junction_points, 2],
-    #     mode='markers',
-    #     marker=dict(
-    #         size=5,
-    #         color='black',
-    #     ),
-    #     name='Points',
-    #     text=[f'Point {i}' for i in junction_points]
-    # )
+    # Visualize junction points
+    point_trace_2 = go.Scatter3d(
+        x=skeleton_points[junction_points, 0],
+        y=skeleton_points[junction_points, 1],
+        z=skeleton_points[junction_points, 2],
+        mode='markers',
+        marker=dict(
+            size=5,
+            color='black',
+        ),
+        name='Points',
+        text=[f'Point {i}' for i in junction_points]
+    )
     
-    # # Visualize end points
-    # point_trace_3 = go.Scatter3d(
-    #     x=skeleton_points[end_points, 0],
-    #     y=skeleton_points[end_points, 1],
-    #     z=skeleton_points[end_points, 2],
-    #     mode='markers',
-    #     marker=dict(
-    #         size=5,
-    #         color='red',
-    #     ),
-    #     name='Points',
-    #     text=[f'Point {i}' for i in end_points]
-    # )
+    # Visualize end points
+    point_trace_3 = go.Scatter3d(
+        x=skeleton_points[end_points, 0],
+        y=skeleton_points[end_points, 1],
+        z=skeleton_points[end_points, 2],
+        mode='markers',
+        marker=dict(
+            size=5,
+            color='red',
+        ),
+        name='Points',
+        text=[f'Point {i}' for i in end_points]
+    )
 
-    # # Create layout
-    # layout = go.Layout(
-    #     scene=dict(
-    #         aspectmode='cube',
-    #         camera=dict(
-    #             eye=dict(x=voxel_sizes[0], y=voxel_sizes[1], z=voxel_sizes[2])
-    #         )
-    #     ),
-    #     height=800,  # Set height to 800 pixels
-    #     width=1600   # Set width to 1200 pixels
-    # )
+    # Create layout
+    layout = go.Layout(
+        scene=dict(
+            aspectmode='cube',
+            camera=dict(
+                eye=dict(x=voxel_sizes[0], y=voxel_sizes[1], z=voxel_sizes[2])
+            )
+        ),
+        height=800,  # Set height to 800 pixels
+        width=1600   # Set width to 1200 pixels
+    )
 
-    # # fig_1 = go.Figure(data=[point_trace_0], layout=layout)
-    # # fig_1.show()
-    # fig_2 = go.Figure(data=[point_trace_2, point_trace_3] + line_traces, layout=layout)
-    # fig_2.show()
+    # fig_1 = go.Figure(data=[point_trace_0], layout=layout)
+    # fig_1.show()
+    fig_2 = go.Figure(data=[point_trace_2, point_trace_3] + line_traces_2, layout=layout)
+    fig_2.show()
 
-    # return
+    return
     # # # Find longest path
     # # longest_path = []
     # # max_points = 0
