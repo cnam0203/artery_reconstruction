@@ -15,6 +15,7 @@ from preprocess_data import *
 from process_graph import *
 from visualize_graph import *
 from slice_selection import *
+from visualize_mesh import *
 
 import cv2
 import math
@@ -52,10 +53,12 @@ def reconstruct_surface(segment_image,
     # Find the voxel-based skeleton
     skeleton = skeletonize(cex_data)
     skeleton_points = np.argwhere(skeleton != 0)
+    artery_points = np.argwhere(cex_data != 0)
     
     # Find endpoints, junctions from skeletons
-    end_points, junction_points, neighbor_distances = find_graph(skeleton_points)
-
+    end_points, junction_points, neighbor_distances = find_graph(skeleton_points, cex_data)
+    line_traces = []
+    
     if 5 in index or 6 in index:
         aca_endpoints = [15, 701]
         directions = ['left', 'right']
@@ -68,40 +71,75 @@ def reconstruct_surface(segment_image,
         junction_points, reduced_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
         skeleton_points, connected_lines, edges = remove_duplicate_paths(skeleton_points, reduced_distances, connected_lines)
         common_paths, left_paths, right_paths, undefined_paths = find_branches(aca_endpoints, end_points, directions, skeleton_points, junction_points, edges)
-        skeleton_points, split_groups = find_split_points(common_paths, original_data, skeleton_points)
+        skeleton_points, split_groups = find_split_points(common_paths, original_data, skeleton_points, connected_lines)
+        common_paths, undefined_paths = correct_undefined_paths(common_paths, undefined_paths, split_groups)
         split_paths = connect_split_points(split_groups, skeleton_points)
-        common_paths, left_paths, right_paths, connected_lines, defined_paths = connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points) 
-        print(defined_paths)
+        common_paths, left_paths, right_paths, connected_lines, defined_paths = connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths) 
         left_paths, right_paths, undefined_paths, connected_lines = connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points)
+        skeleton_points, connected_lines = reinterpolate_connected_lines(skeleton_points, connected_lines)
+        left_points, right_points = extract_point_position(skeleton_points, connected_lines, left_paths, right_paths)
+        touch_points, artery_data = find_touchpoints(mask_data, left_points, right_points, 1)
+        visualize_artery_mesh(artery_data, voxel_sizes, [1, 2], folder_path)
         
-    visualized_skeleton_points = generate_points(skeleton_points)
+        line_groups = [right_paths, left_paths, undefined_paths]
+        line_colors = ['blue', 'green', 'orange']
+        
+
+        for i, line_group in enumerate(line_groups):
+            for line in line_group:
+                for connected_line in connected_lines:
+                    if (line[0] in connected_line and line[-1] in connected_line):
+                        color = line_colors[i]
+                        line_traces.append(generate_lines(skeleton_points[connected_line], 4, color))
+    
+        visualized_split_points = []
+        visualized_split_paths = []
+        for group in split_groups:
+            visualized_split_points.append(generate_points(skeleton_points[group]))
+    
+    elif 16 in index:
+        aca_endpoints = [0, 0]
+        directions = ['left', 'right']
+        junction_points, neighbor_distances = remove_junction_points(neighbor_distances, junction_points, skeleton_points)
+        junction_points, reduced_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
+        skeleton_points, connected_lines, edges = remove_duplicate_paths(skeleton_points, reduced_distances, connected_lines)
+        common_paths, left_paths, right_paths, undefined_paths = find_branches(aca_endpoints, end_points, directions, skeleton_points, junction_points, edges)
+        skeleton_points, split_groups = find_split_points(common_paths, original_data, mask_data, cex_data, skeleton_points, connected_lines)
+        common_paths, undefined_paths = correct_undefined_paths(common_paths, undefined_paths, split_groups)
+        split_paths = connect_split_points(split_groups, skeleton_points)
+        common_paths, left_paths, right_paths, connected_lines, defined_paths = connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths) 
+        left_paths, right_paths, undefined_paths, connected_lines = connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points)
+        skeleton_points, connected_lines = reinterpolate_connected_lines(skeleton_points, connected_lines)
+        left_points, right_points = extract_point_position(skeleton_points, connected_lines, left_paths, right_paths)
+        touch_points, artery_data = find_touchpoints(mask_data, left_points, right_points, 1)
+        visualize_artery_mesh(artery_data, voxel_sizes, [1, 2], folder_path)
+        
+        # for split_path in split_paths:
+        #     for line in split_path:
+        #         line_traces.append(generate_lines(skeleton_points[line], 4))
+        
+        # print(split_paths)
+
+        line_groups = [left_paths, right_paths]
+        line_colors = ['blue', 'green']
+        
+        # for connected_line in connected_lines:
+        #     line_traces.append(generate_lines(skeleton_points[connected_line], 4))
+        for i, line_group in enumerate(line_groups):
+            for line in line_group:
+                for connected_line in connected_lines:
+                    if (line[0] in connected_line and line[-1] in connected_line):
+                        color = line_colors[i]
+                        line_traces.append(generate_lines(skeleton_points[connected_line], 4, color))
+        # for edge in edges:
+        #     line_traces.append(generate_lines(skeleton_points[edge], 4))  
+                        
+    visualized_skeleton_points = generate_points(skeleton_points, 3)
     visualized_end_points = generate_points(skeleton_points[end_points], 5, 'red')
     visualized_junction_points = generate_points(skeleton_points[junction_points], 5, 'green')
-    visualized_direct_lines = []
-    visualized_connected_lines = []
-    
-    # for line in connected_lines:
-    #     visualized_direct_lines.append(generate_lines(skeleton_points[[line[0], line[-1]]], 5))
-    #     for k in range(len(line)-1):
-    #         visualized_connected_lines.append(generate_lines(skeleton_points[[line[k], line[k+1]]]))
-    
-    line_groups = [right_paths, left_paths, undefined_paths]
-    line_colors = ['blue', 'green', 'orange']
-    line_traces = []
-
-    for i, line_group in enumerate(line_groups):
-        for line in line_group:
-            for connected_line in connected_lines:
-                if (line[0] in connected_line and line[-1] in connected_line):
-                    color = line_colors[i]
-                    line_traces.append(generate_lines(skeleton_points[connected_line], 2, color))
-    
-    # visualized_split_points = []
-    # visualized_split_paths = []
-    # for group in split_groups:
-    #     visualized_split_points.append(generate_points(skeleton_points[group]))
+    visualized_artery_points = generate_points(artery_points, 1, 'blue')
         
-    show_figure([visualized_end_points, visualized_junction_points] + line_traces)
+    show_figure([visualized_skeleton_points, visualized_end_points, visualized_junction_points, visualized_artery_points] + line_traces)
     
     return
 
@@ -124,8 +162,8 @@ if __name__ == "__main__":
     # Load the NIfTI image
     segment_image = nib.load(segment_file_path)
     original_image = nib.load(original_file_path)
-    intensity_threshold_1 = 0.2
-    intensity_threshold_2 = 0.1
+    intensity_threshold_1 = 0.1
+    intensity_threshold_2 = 0.000001
     gaussian_sigma=2
     distance_threshold=20
     laplacian_iter = 5
@@ -134,7 +172,7 @@ if __name__ == "__main__":
     reconstruct_surface(
                     segment_image, 
                     original_image, 
-                    index=[5, 6], 
+                    index=[16], 
                     intensity_threshold_1=intensity_threshold_1, 
                     intensity_threshold_2=intensity_threshold_2, 
                     gaussian_sigma=gaussian_sigma, 

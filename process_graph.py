@@ -2,6 +2,10 @@ import numpy as np
 import math
 import copy
 import heapq
+import plotly.graph_objs as go
+from scipy.ndimage import convolve
+from skimage.draw import line_nd
+
 
 def euclidean_distance(point1, point2):
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(point1, point2)))
@@ -43,7 +47,20 @@ def find_angle(vector1, vector2):
     
     return abs(np.degrees(angle_radians))
 
-def find_graph(skeleton_points):
+def connected_neighbors_prob(point_a, point_b, segment_data):
+    line_indices = line_nd(point_a, point_b)
+    voxel_positions = np.transpose(line_indices)
+    num_points = voxel_positions.shape[0]
+    valid_points = 0
+    
+    for point in voxel_positions:
+        x, y, z = point[0], point[1], point[2]
+        if segment_data[x][y][z]:
+            valid_points += 1
+            
+    return valid_points/num_points
+    
+def find_graph(skeleton_points, cex_data):
     """
     The function `find_graph` takes a list of skeleton points, identifies endpoints and junction points
     based on Euclidean distances and angles, and returns the end points, junction points, and neighbor
@@ -110,6 +127,11 @@ def find_graph(skeleton_points):
         is_exist_1 = False
         is_exist_2 = False
         
+        distance_gap = 2
+        
+        if point_a[0] == 163 and point_a[1] == 136 and point_a[2] == 238:
+            print(skeleton_points[closest_point_1], skeleton_points[closest_point_2])
+
         '''
         Check endpoint if there is no point which is situated in the opposite space 
         which is separated by the plane which is perpendicular to the vector created 
@@ -124,9 +146,14 @@ def find_graph(skeleton_points):
                 angle_degrees = find_angle(vector_a1, vector_ba)
                 dist_2 = (point_a[0]-point_b[0])**2 + (point_a[1]-point_b[1])**2 + (point_a[2]-point_b[2])**2
                 
-                if angle_degrees > 90 and math.sqrt(dist_2) < math.sqrt(min_dist_1)*2.5:
-                    is_exist_1 = True
-                    break
+                if angle_degrees > 90 and math.sqrt(dist_2) < math.sqrt(min_dist_1)*distance_gap:
+                    if connected_neighbors_prob(point_a, point_b, cex_data) > 0.5:
+                        is_exist_1 = True
+                        
+                        if point_a[0] == 163 and point_a[1] == 136 and point_a[2] == 238:
+                            print('A: ', point_b, angle_degrees)
+                
+                        break
                     
         for j, point_b in enumerate(skeleton_points):
             # Calculate the dot product of the two vectors
@@ -137,9 +164,14 @@ def find_graph(skeleton_points):
                 angle_degrees = find_angle(vector_a2, vector_ba)
                 dist_2 = (point_a[0]-point_b[0])**2 + (point_a[1]-point_b[1])**2 + (point_a[2]-point_b[2])**2
                 
-                if angle_degrees > 90 and math.sqrt(dist_2) < math.sqrt(min_dist_2)*2.5:
-                    is_exist_2 = True
-                    break
+                if angle_degrees > 90 and math.sqrt(dist_2) < math.sqrt(min_dist_2)*distance_gap:
+                    if connected_neighbors_prob(point_a, point_b, cex_data) > 0.5:
+                        is_exist_2 = True
+                        
+                        if point_a[0] == 163 and point_a[1] == 136 and point_a[2] == 238:
+                            print('B: ', point_b, angle_degrees)
+                            
+                        break
         
         # A point_a is considered an endpoint when there is no points below the normal planes
         if not is_exist_1 and not is_exist_2: 
@@ -715,6 +747,7 @@ def dijkstra(edges, start, end, skeleton_points, direction):
             path = path + [node]
             if node == end:
                 return cost, path
+            
             for neighbor in graph[node]:
                 if neighbor not in visited:
                     new_edge = (node, neighbor)
@@ -1041,10 +1074,53 @@ def find_shortest_distance(start_point, list_points):
     return min_distance, min_index
 
 
-def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points):
+def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths):
     defined_paths = [False] * len(common_paths)
     is_found = True
     loop = 0
+    
+    if len(left_paths) == 0 and len(right_paths) == 0 and len(common_paths) > 0:
+        common_path = common_paths[0]
+        head_pos = 0
+        defined_paths[0] = [0, 1]
+        
+        for path in undefined_paths:
+            common_point = None
+            
+            if common_path[0] == path[0] or common_path[0] == path[1]:
+                common_point = common_path[0]
+            
+            if common_point is None:
+                if common_path[1] == path[0] or common_path[1] == path[1]:
+                    common_point = common_path[1]
+                    head_pos = 1
+            
+            if common_point is not None:
+                left_split_path = copy.deepcopy(split_paths[0][0])
+                right_split_path = copy.deepcopy(split_paths[0][1])
+                
+                print(skeleton_points[left_split_path])
+                print(skeleton_points[right_split_path])
+                
+                if head_pos == 0:
+                    left_paths.append([split_paths[0][0][-1], split_paths[0][0][0]])
+                    right_paths.append([split_paths[0][1][-1], split_paths[0][1][0]])
+                    # left_paths.append([split_paths[0][0][-1], common_point])
+                    # right_paths.append([split_paths[0][1][-1], common_point])
+                    # left_split_path.insert(0, common_point)
+                    # right_split_path.insert(0, common_point)
+                    connected_lines.append(left_split_path)
+                    connected_lines.append(right_split_path)
+                else:
+                    left_paths.append([split_paths[0][0][-1], split_paths[0][0][0]])
+                    right_paths.append([split_paths[0][1][-1], split_paths[0][1][0]])
+                    # left_paths.append([split_paths[0][0][0], common_point])
+                    # right_paths.append([split_paths[0][1][0], common_point])
+                    # left_split_path.append(common_point)
+                    # right_split_path.append(common_point)
+                    connected_lines.append(left_split_path)
+                    connected_lines.append(right_split_path)
+                break
     
     while is_found and loop <= 1:
         loop += 1
@@ -1302,10 +1378,101 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
     
     return common_paths, left_paths, right_paths, connected_lines, defined_paths
                 
-            
+def find_neighbor_point(path, connected_lines, pos):
+    for idx, line in enumerate(connected_lines):
+        if (line[0] == path[0]) and (line[-1] == path[-1]):
+            if pos == 0:
+                return line[1], idx
+            else:
+                return line[-2], idx
+        elif (line[-1] == path[0]) and (line[0] == path[-1]):
+            if pos == 0:
+                return line[-2], idx
+            else:
+                return line[1], idx
+    
+    return 0, None
+
 def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points):
     remove_idx = []
     
+    for idx, common_path in enumerate(common_paths):
+        common_path_idx_0 = []
+        common_path_idx_1 = []
+        common_path_pos_0 = []
+        common_path_pos_1 = []
+        remove_idx = []
+        
+        for path_idx, path in enumerate(undefined_paths):
+            if (path[0] == common_path[0]):
+                common_path_idx_0.append(path_idx)
+                common_path_pos_0.append(0)
+            elif (path[0] == common_path[-1]):
+                common_path_idx_1.append(path_idx)
+                common_path_pos_1.append(0)
+            elif (path[-1] == common_path[0]):
+                common_path_idx_0.append(path_idx)
+                common_path_pos_0.append(-1)
+            elif (path[-1] == common_path[-1]):
+                common_path_idx_1.append(path_idx)
+                common_path_pos_1.append(-1)
+                
+        if len(common_path_idx_0) == 2:
+            remove_idx = common_path_idx_0
+            split_point_1, con_line_idx_1 = find_neighbor_point(undefined_paths[common_path_idx_0[0]], connected_lines, common_path_pos_0[0])
+            split_point_2, con_line_idx_2 = find_neighbor_point(undefined_paths[common_path_idx_0[1]], connected_lines, common_path_pos_0[1])
+            left_connected_line = split_paths[idx][0]
+            right_connected_line = split_paths[idx][1]
+            
+            shortest_distance_11, point_11 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[left_connected_line])
+            shortest_distance_12, point_12 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[right_connected_line])
+            shortest_distance_21, point_21 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[left_connected_line])
+            shortest_distance_22, point_22 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[right_connected_line])
+            min_distance = min(shortest_distance_11, shortest_distance_12, shortest_distance_21, shortest_distance_22)
+            
+            if (min_distance == shortest_distance_11) or (min_distance == shortest_distance_22):
+                path_dir_1 = defined_paths[idx][0]
+                    
+            else:
+                path_dir_1 = defined_paths[idx][1]
+                
+            if path_dir_1 == 0:
+                left_paths.append(undefined_paths[common_path_idx_0[0]])
+                right_paths.append(undefined_paths[common_path_idx_0[1]])
+            else:
+                left_paths.append(undefined_paths[common_path_idx_0[1]])
+                right_paths.append(undefined_paths[common_path_idx_0[0]])
+                    
+        if len(common_path_idx_1) == 2:
+            remove_idx = remove_idx + common_path_idx_1
+            split_point_1, con_line_idx_1 = find_neighbor_point(undefined_paths[common_path_idx_1[0]], connected_lines, common_path_pos_1[0])
+            split_point_2, con_line_idx_2 = find_neighbor_point(undefined_paths[common_path_idx_1[1]], connected_lines, common_path_pos_1[1])
+            left_connected_line = split_paths[idx][0]
+            right_connected_line = split_paths[idx][1]
+            
+            shortest_distance_11, point_11 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[left_connected_line])
+            shortest_distance_12, point_12 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[right_connected_line])
+            shortest_distance_21, point_21 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[left_connected_line])
+            shortest_distance_22, point_22 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[right_connected_line])
+            min_distance = min(shortest_distance_11, shortest_distance_12, shortest_distance_21, shortest_distance_22)
+            
+            if (min_distance == shortest_distance_11) or (min_distance == shortest_distance_22):
+                path_dir_1 = defined_paths[idx][0]
+                    
+            else:
+                path_dir_1 = defined_paths[idx][1]
+                
+            if path_dir_1 == 0:
+                left_paths.append(undefined_paths[common_path_idx_1[0]])
+                right_paths.append(undefined_paths[common_path_idx_1[1]])
+            else:
+                left_paths.append(undefined_paths[common_path_idx_1[1]])
+                right_paths.append(undefined_paths[common_path_idx_1[0]])
+    
+        for i in sorted(remove_idx, reverse=True):
+            del undefined_paths[i]
+    
+    remove_idx = []   
     for path_idx, path in enumerate(undefined_paths):
         for idx, common_path in enumerate(common_paths):
             split_path = split_paths[idx]
@@ -1372,4 +1539,264 @@ def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_pa
     
         
     return left_paths, right_paths, undefined_paths, connected_lines
+
+# Define a function to find neighbors
+def find_distant_neighbors(data, i, j, k, threshold):
+    for di in [-1, 0, 1]:
+        for dj in [-1, 0, 1]:
+            for dk in [-1, 0, 1]:
+                if di == dj == dk == 0:
+                    continue  # Skip the current point
+                ni, nj, nk = i + di, j + dj, k + dk
+                if 0 <= ni < data.shape[0] and 0 <= nj < data.shape[1] and 0 <= nk < data.shape[2]:
+                    if (data[ni][nj][nk] > 0):
+                        value_1 = data[i][j][k]
+                        value_2 = data[ni][nj][nk]
+                        if abs(value_1 - value_2) >= threshold:
+                            return True
+
+    return False
+    
+def find_nearest_point(artery_data, i, j, k, distance_threshold):
+    count_x = 0
+    index_x = -2
+    count_y = 0
+    index_y = -2
+    count_z = 0
+    index_z = -2
+
+    for x in [-1, 1]:
+        ni = i + x
+        if 0 <= ni < artery_data.shape[0] and artery_data[ni][j][k] > 0:
+            count_x += 1
+
+            if count_x == 2:
+                if abs(artery_data[ni][j][k] - index_x) >= distance_threshold:
+                    index_x = -1
+                else:
+                    index_x = artery_data[ni][j][k]
+            else:
+                index_x = artery_data[ni][j][k]
+
+    for y in [-1, 1]:
+        nj = j + y
+        if 0 <= nj < artery_data.shape[1] and artery_data[i][nj][k] > 0:
+            count_y += 1
+
+            if count_y == 2:
+                if abs(artery_data[i][nj][k] - index_y) >= distance_threshold:
+                    index_y = -1
+                else:
+                    index_y = artery_data[i][nj][k]
+            else:
+                index_y = artery_data[i][nj][k]
+    
+    for z in [-1, 1]:
+        nk = k + z
+        if 0 <= nk < artery_data.shape[2] and artery_data[i][j][nk] > 0:
+            count_z += 1
+
+            if count_z == 2:
+                if abs(artery_data[i][j][nk] - index_z) >= distance_threshold:
+                    index_z = -1
+                else:
+                    index_z = artery_data[i][j][nk]
+            else:
+                index_z = artery_data[i][j][nk]
+
+    if (index_x == -1 or index_y == -1 or index_z == -1):
+        return -1
+    
+    if (index_x != -2): return index_x
+    if (index_y != -2): return index_y
+    if (index_z != -2): return index_z
+
+    return 0
+
+def find_touchpoints(mask_data, left_points, right_points, distance_threshold=1):
+    new_points = 1000000
+    loop = 0
+    zero_positions = np.argwhere(mask_data != 0)
+
+    artery_data = np.zeros_like(mask_data)
+    for pos in left_points:
+        artery_data[pos[0]][pos[1]][pos[2]] = 1
+    
+    for pos in right_points:
+        artery_data[pos[0]][pos[1]][pos[2]] = 2
+
+    while new_points != 0:
+        loop += 1
+        new_points = 0
+        coordinates_to_update = []
+        remove_idx = []
+
+        for idx, pos in enumerate(zero_positions):
+            i, j, k = pos[0], pos[1], pos[2]
+
+            if artery_data[i][j][k] == 0:
+                index = find_nearest_point(artery_data, i, j, k, distance_threshold)
+                coordinates_to_update.append((i, j, k, index))
+
+                if (index != 0):
+                    remove_idx.append(idx)
+                    new_points += 1
+
+        for i, j, k, index in coordinates_to_update:
+            artery_data[i][j][k] = index
+
+        zero_positions = np.delete(zero_positions, remove_idx, axis=0)
+    
+    zero_positions = np.argwhere(mask_data != 0)
+    coordinates_to_update = []
+    kernel = np.ones((3, 3, 3), dtype=np.int64)
+    kernel[1, 1, 1] = 0  # Exclude the center voxel
+
+    for idx, pos in enumerate(zero_positions):
+        x, y, z = pos[0], pos[1], pos[2]
+        # Extract the neighborhood around the current voxel
+        neighborhood = artery_data[max(0, x-1):min(artery_data.shape[0], x+2),
+                                max(0, y-1):min(artery_data.shape[1], y+2),
+                                max(0, z-1):min(artery_data.shape[2], z+2)]
+
+        # Perform convolution to count neighbor occurrences of each value
+        count_1 = np.argwhere(neighborhood == 1).shape[0]
+        count_2 = np.argwhere(neighborhood == 2).shape[0]
+        current_value = artery_data[x][y][z]
+        
+        if count_1 > count_2:
+            if count_1 != current_value and count_1 > 0.5*(count_1 + count_2):
+                coordinates_to_update.append((x, y, z, 1))
+        
+        elif count_2 > count_1:
+            if count_2 != current_value and count_2 > 0.5*(count_1 + count_2):
+                coordinates_to_update.append((x, y, z, 2))
+        
+    for i, j, k, updated_data in coordinates_to_update:
+        artery_data[i][j][k] = updated_data
+        
+    # touch_points = []
+    # suspected_positions = np.argwhere(artery_data > 0)
+
+    # for pos in suspected_positions:
+    #         i, j, k = pos[0], pos[1], pos[2]
+    #         is_touch = find_distant_neighbors(artery_data, i, j, k, distance_threshold)
+    #         if is_touch:
+    #             touch_points.append([i, j, k])
+    
+    # for pos in touch_points:
+    #     artery_data[pos[0]][pos[1]][pos[2]] = -1 
+
+    touch_points = np.argwhere(artery_data == -1)
+    artery_points = np.argwhere(artery_data != 0)
+    artery_values = artery_data[artery_points[:, 0], artery_points[:, 1], artery_points[:, 2]]
+
+    point_trace = go.Scatter3d(
+        x=artery_points[:, 0],
+        y=artery_points[:, 1],
+        z=artery_points[:, 2],
+        mode='markers',
+        marker=dict(
+            symbol='circle',  # Set marker symbol to 'cube'
+            size=5,
+            color=artery_values,  # Color based on the values
+            colorscale='Viridis',  # Colormap
+        ),
+        text=[f'Value: {val}' for val in artery_values],
+        hoverinfo='text'
+    )
+
+    # Create layout
+    layout = go.Layout(
+        scene=dict(
+            aspectmode='cube',
+            camera=dict(
+                eye=dict(x=1, y=1, z=1)
+            )
+        ),
+        height=800,  # Set height to 800 pixels
+        width=1200   # Set width to 1200 pixels
+    )
+     
+    fig = go.Figure(data=[point_trace], layout=layout)
+    fig.show()
+    
+    print('Number extension loops: ', loop)
+    print('Number kissing points:', touch_points.shape[0])
+
+    return touch_points, artery_data
+
+def extract_point_position(skeleton_points, connected_lines, left_paths, right_paths):
+    left_voxels = []
+    right_voxels = []
+    
+    for path in left_paths:
+        for line in connected_lines:
+            if (path[0] == line[0] and path[1] == line[-1]) or (path[0] == line[-1] and path[1] == line[0]):
+                left_voxels = left_voxels + line
+                break
+            
+    for path in right_paths:
+        for line in connected_lines:
+            if (path[0] == line[0] and path[1] == line[-1]) or (path[0] == line[-1] and path[1] == line[0]):
+                right_voxels = right_voxels + line
+                break
+            
+    left_voxels = list(set(left_voxels))
+    right_voxels = list(set(right_voxels))
+    
+    return skeleton_points[left_voxels], skeleton_points[right_voxels]
+
+def interpolate_path(path):
+    interpolated_points = []
+
+    interpolated_points.append(path[0])
+    for i in range(len(path) - 1):
+        p1 = path[i]
+        p2 = path[i + 1]
+
+        # Compute the distance between the two points
+        distance = np.linalg.norm(np.array(p2) - np.array(p1))
+        # Determine the number of interpolated points needed
+        num_interpolated_points = int(distance)  # You can adjust this if needed
+
+        # Perform linear interpolation between p1 and p2
+        for j in range(1, num_interpolated_points):
+            alpha = j / num_interpolated_points
+            interpolated_point = tuple((np.array(p1) * (1 - alpha) + np.array(p2) * alpha).astype(int))
+            interpolated_points.append(interpolated_point)
+
+        interpolated_points.append(p2)
+
+    return interpolated_points
+
+def reinterpolate_connected_lines(skeleton_points, connected_lines):
+    for i, line in enumerate(connected_lines):
+        inter_points = interpolate_path(skeleton_points[line])
+        
+        if len(inter_points) > 2:
+            new_line = [line[0]]
+            
+            for new_point in inter_points[1:-1]:
+                new_index = skeleton_points.shape[0]
+                skeleton_points = np.vstack([skeleton_points, new_point])
+                new_line.append(new_index)
+            
+            new_line.append(line[-1])
+            connected_lines[i] = new_line
+        
+    return skeleton_points, connected_lines
+
+def correct_undefined_paths(common_paths, undefined_paths, split_groups):
+    remove_idx = []
+    
+    for idx, path in enumerate(common_paths):
+        if len(split_groups[idx]) == 0:
+            remove_idx.append(idx)
+            undefined_paths.append(path)
+
+    for i in sorted(remove_idx, reverse=True):
+        del common_paths[i]
+        
+    return common_paths, undefined_paths
     

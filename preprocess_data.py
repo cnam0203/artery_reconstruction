@@ -51,7 +51,7 @@ def remove_noisy_voxels(voxels):
                 neighbor_counts += np.roll(voxels, (i, j, k), axis=(0, 1, 2))
 
     # Apply the condition to remove noisy voxels
-    result = np.where((voxels == 1) & (neighbor_counts < 5), 0, voxels)
+    result = np.where((voxels == 1) & (neighbor_counts < 8), 0, voxels)
 
     return result
 
