@@ -188,7 +188,7 @@ def find_split_points(common_paths, original_data, mask_data, selected_data, ske
         split_group = []
         cube_size = original_data.shape
 
-        result = auto_select_slices(cube_size, path_index, skeleton_points, 12, common_paths, connected_lines)
+        result = auto_select_slices(cube_size, path_index, skeleton_points, 10, common_paths, connected_lines)
         axis = result['axis']
         start_point, end_point = result['head_points']
         

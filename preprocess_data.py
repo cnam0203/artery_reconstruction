@@ -24,7 +24,7 @@ def remove_noisy_regions(data):
     return data
 
 
-def remove_noisy_voxels(voxels):
+def remove_noisy_voxels(voxels, neighbor_threshold):
     """
     The function `remove_noisy_voxels` takes a 3D array of voxels, counts the number of non-zero
     neighboring voxels for each voxel using a 3x3x3 kernel, and removes noisy voxels based on a
@@ -51,7 +51,7 @@ def remove_noisy_voxels(voxels):
                 neighbor_counts += np.roll(voxels, (i, j, k), axis=(0, 1, 2))
 
     # Apply the condition to remove noisy voxels
-    result = np.where((voxels == 1) & (neighbor_counts < 8), 0, voxels)
+    result = np.where((voxels == 1) & (neighbor_counts < neighbor_threshold), 0, voxels)
 
     return result
 
@@ -86,7 +86,8 @@ def preprocess_data(
     index=[],
     intensity_threshold_1=0.65,
     intensity_threshold_2=0.65,
-    gaussian_sigma=0
+    gaussian_sigma=0,
+    neighbor_threshold=8
 ):
     """
     The `preprocess_data` function preprocesses original and segmented data by applying Gaussian
@@ -143,13 +144,13 @@ def preprocess_data(
     # Select voxels matching intensity threshold + remove noisy voxels
     cex_data[cex_data < intensity_threshold_1] = 0
     cex_data[cex_data >= intensity_threshold_1] = 1
-    cex_data = remove_noisy_voxels(cex_data)
+    cex_data = remove_noisy_voxels(cex_data, neighbor_threshold)
     cex_data = remove_noisy_regions(cex_data)
 
     # Select voxels matching intensity threshold + remove noisy voxels
     surf_data[surf_data < intensity_threshold_2] = 0
     surf_data[surf_data >= intensity_threshold_2] = 1
-    surf_data = remove_noisy_voxels(surf_data)
+    surf_data = remove_noisy_voxels(surf_data, neighbor_threshold)
     surf_data = remove_noisy_regions(surf_data)
 
     return mask_data, cex_data, surf_data
