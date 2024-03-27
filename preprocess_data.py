@@ -4,6 +4,59 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy import ndimage
 
+def voxels_inside_cube(point1, point2):
+    # Determine the minimum and maximum coordinates along each axis
+    min_x = min(point1[0], point2[0])
+    max_x = max(point1[0], point2[0])
+    min_y = min(point1[1], point2[1])
+    max_y = max(point1[1], point2[1])
+    min_z = min(point1[2], point2[2])
+    max_z = max(point1[2], point2[2])
+
+    # Iterate through each voxel within the cube
+    voxels = []
+    for x in range(min_x, max_x + 1):
+        for y in range(min_y, max_y + 1):
+            for z in range(min_z, max_z + 1):
+                voxels.append((x, y, z))
+
+    return voxels
+
+def set_voxel_to_zero(voxels):
+    new_voxels = voxels.copy()
+    one_points = np.argwhere(voxels == 1)
+    shape = voxels.shape
+
+    shape = voxels.shape
+    positions_to_set_zero = []
+    remove_points = []
+    
+    for point in one_points:
+        i, j, k = point[0], point[1], point[2]
+        # Check diagonal neighbors
+        diagonal_neighbors = []
+        for di in [-1, 0, 1]:
+            for dj in [-1, 0, 1]:
+                for dk in [-1, 0, 1]:
+                    if (di, dj, dk) != (0, 0, 0):
+                        ni, nj, nk = i + di, j + dj, k + dk
+                        if 0 <= ni < shape[0] and 0 <= nj < shape[1] and 0 <= nk < shape[2] and voxels[ni, nj, nk] and abs(i) + abs(j) + abs(k) >= 2:
+                            diagonal_neighbors.append([ni, nj, nk])
+                            
+        for neighbor in diagonal_neighbors:
+            inside_voxels = voxels_inside_cube(point, neighbor)
+            count = 0
+            for voxel in inside_voxels:
+                if voxels[voxel[0]][voxel[1]][voxel[2]]:
+                    count += 1
+            
+            if (count/len(inside_voxels)) < 0.5:
+                remove_points.append(point)
+    
+    for voxel in remove_points:
+        new_voxels[voxel[0]][voxel[1]][voxel[2]] = 0
+               
+    return new_voxels
 
 def remove_noisy_regions(data):
     """
@@ -24,7 +77,7 @@ def remove_noisy_regions(data):
     return data
 
 
-def remove_noisy_voxels(voxels, neighbor_threshold):
+def remove_noisy_voxels(voxels, neighbor_threshold, is_remove):
     """
     The function `remove_noisy_voxels` takes a 3D array of voxels, counts the number of non-zero
     neighboring voxels for each voxel using a 3x3x3 kernel, and removes noisy voxels based on a
@@ -51,7 +104,10 @@ def remove_noisy_voxels(voxels, neighbor_threshold):
                 neighbor_counts += np.roll(voxels, (i, j, k), axis=(0, 1, 2))
 
     # Apply the condition to remove noisy voxels
-    result = np.where((voxels == 1) & (neighbor_counts < neighbor_threshold), 0, voxels)
+    if is_remove:
+        result = np.where((voxels == 1) & (neighbor_counts < neighbor_threshold), 0, voxels)
+    else:
+        result = np.where((voxels == 0) & (neighbor_counts >= neighbor_threshold), 1, voxels)
 
     return result
 
@@ -87,7 +143,8 @@ def preprocess_data(
     intensity_threshold_1=0.65,
     intensity_threshold_2=0.65,
     gaussian_sigma=0,
-    neighbor_threshold=8
+    neighbor_threshold_1=8,
+    neighbor_threshold_2=15
 ):
     """
     The `preprocess_data` function preprocesses original and segmented data by applying Gaussian
@@ -144,13 +201,27 @@ def preprocess_data(
     # Select voxels matching intensity threshold + remove noisy voxels
     cex_data[cex_data < intensity_threshold_1] = 0
     cex_data[cex_data >= intensity_threshold_1] = 1
-    cex_data = remove_noisy_voxels(cex_data, neighbor_threshold)
+    
+    cex_data = remove_noisy_voxels(cex_data, neighbor_threshold_1, True)
     cex_data = remove_noisy_regions(cex_data)
+    
+    unchanged = False
+    loop = 0
+    while loop <= 50 and unchanged == False:
+        loop += 1
+        old_count = np.argwhere(cex_data == 1).shape[0]
+        cex_data = remove_noisy_voxels(cex_data, neighbor_threshold_2, False)
+        new_count = np.argwhere(cex_data == 1).shape[0]
+        
+        if old_count == new_count:
+            unchanged = True
+            
+    cex_data = set_voxel_to_zero(cex_data)
 
     # Select voxels matching intensity threshold + remove noisy voxels
     surf_data[surf_data < intensity_threshold_2] = 0
     surf_data[surf_data >= intensity_threshold_2] = 1
-    surf_data = remove_noisy_voxels(surf_data, neighbor_threshold)
+    surf_data = remove_noisy_voxels(surf_data, neighbor_threshold_1, neighbor_threshold_2)
     surf_data = remove_noisy_regions(surf_data)
 
     return mask_data, cex_data, surf_data

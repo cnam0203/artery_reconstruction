@@ -61,19 +61,20 @@ def reconstruct_surface(segment_image,
     left_paths, right_paths = [], []
     
     if 5 in index or 6 in index:
-        aca_endpoints = [0, 284]
-        # aca_endpoints = [4, 464]
+        # aca_endpoints = [0, 284]
+        aca_endpoints = [4, 464]
         # aca_endpoints = [15, 701]
         directions = ['left', 'right']
         endpoint_vector = skeleton_points[aca_endpoints[0]] - skeleton_points[aca_endpoints[1]]
-        
+        # common_paths, left_paths, right_paths, undefined_paths = find_branches(aca_endpoints, end_points, directions, skeleton_points, junction_points, edges, connected_lines)
+
         # Remove redundant junction points
         # junction_points, neighbor_distances = remove_junction_points(neighbor_distances, junction_points, skeleton_points)
         # junction_points, reduced_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
-        junction_points, neighbor_distances = remove_cycle_edges(skeleton_points, reduced_distances, neighbor_distances, endpoint_vector, connected_lines)
+        # junction_points, neighbor_distances = remove_cycle_edges(skeleton_points, reduced_distances, neighbor_distances, endpoint_vector, connected_lines)
         # junction_points, reduced_distances, connected_lines = reduce_skeleton_points(neighbor_distances, junction_points, end_points, skeleton_points)
-        skeleton_points, connected_lines, edges = remove_duplicate_paths(skeleton_points, reduced_distances, connected_lines)
-        common_paths, left_paths, right_paths, undefined_paths = find_branches(aca_endpoints, end_points, directions, skeleton_points, junction_points, edges, connected_lines)
+        # skeleton_points, connected_lines, edges = remove_duplicate_paths(skeleton_points, reduced_distances, connected_lines)
+        # common_paths, left_paths, right_paths, undefined_paths = find_branches(aca_endpoints, end_points, directions, skeleton_points, junction_points, edges, connected_lines)
         # skeleton_points, split_groups = find_split_points(common_paths, original_data, mask_data, cex_data, skeleton_points, connected_lines)
         # common_paths, undefined_paths = correct_undefined_paths(common_paths, undefined_paths, split_groups)
         # split_paths = connect_split_points(split_groups, skeleton_points)
@@ -127,8 +128,8 @@ def reconstruct_surface(segment_image,
         
     show_figure([
         visualized_skeleton_points, 
-        visualized_end_points, 
-        visualized_junction_points,
+        # visualized_end_points, 
+        # visualized_junction_points,
         # visualized_artery_points,
         ] 
         + line_traces
@@ -146,11 +147,11 @@ if __name__ == "__main__":
     # segment_file_path =  '/Users/apple/Downloads/sub61_harvard_watershed.nii.gz'
     # original_file_path = '/Users/apple/Downloads/sub-61_acq-tof_angio_resampled.nii.gz'
     
-    segment_file_path = '/Users/apple/Downloads/TOF_multiclass_segmentation.nii.gz'
-    original_file_path = '/Users/apple/Downloads/sub-1_run-1_mra_TOF.nii.gz'
+    # segment_file_path = '/Users/apple/Downloads/TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = '/Users/apple/Downloads/sub-1_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path =  '/Users/apple/Downloads/For_ChanNam/sub-5753_run-1_mra_eICAB_CW.nii.gz'
-    # original_file_path = '/Users/apple/Downloads/For_ChanNam/sub-5753_run-1_mra_resampled.nii.gz'
+    segment_file_path =  '/Users/apple/Downloads/For_ChanNam/sub-5753_run-1_mra_eICAB_CW.nii.gz'
+    original_file_path = '/Users/apple/Downloads/For_ChanNam/sub-5753_run-1_mra_resampled.nii.gz'
     
     # Create a folder holding all outpout files
     filename = os.path.basename(segment_file_path)  # Extracts the filename from the path
@@ -162,7 +163,7 @@ if __name__ == "__main__":
     # Load the NIfTI image
     segment_image = nib.load(segment_file_path)
     original_image = nib.load(original_file_path)
-    intensity_threshold_1 = 0.1
+    intensity_threshold_1 = 0.2
     intensity_threshold_2 = 0.1
     gaussian_sigma=2
     distance_threshold=20
@@ -173,7 +174,7 @@ if __name__ == "__main__":
     reconstruct_surface(
                     segment_image, 
                     original_image, 
-                    index=[5, 6], 
+                    index=[5, 6, 3], 
                     intensity_threshold_1=intensity_threshold_1, 
                     intensity_threshold_2=intensity_threshold_2, 
                     gaussian_sigma=gaussian_sigma, 
