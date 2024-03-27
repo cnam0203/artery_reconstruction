@@ -2,6 +2,7 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 from process_graph import *
+from collections import deque
 
 def visualize_slice(intensity_slice, segment_slice, fixed_slice, split_points, start_point, index, axis):
     fig, axs = plt.subplots()  # Create figure and axes objects
@@ -122,7 +123,7 @@ def auto_select_slices(cube_size, path_index, skeleton_points, square_edge, comm
     perpendicular_slices = []
     axis_points = skeleton_points[connected_line][:, axis]
     latest_point = point1
-    
+
     for i in range(point1[axis], point2[axis] + increment, increment):
         pos = np.argwhere(axis_points == i)[:, 0].tolist()
 
@@ -136,11 +137,7 @@ def auto_select_slices(cube_size, path_index, skeleton_points, square_edge, comm
             intersection_point = np.mean(skeleton_points[selected_index], axis=0).astype(int)
         
         latest_point = intersection_point
-            
-        # intersection_point = find_intersection_point(point1, point2, [i, i, i], axis)
-        # Find the square region centered at the intersection point
         square_region = find_square_region(cube_size, np.array(intersection_point), square_edge, axis, i)
-        # Append slice and square region to the list
         perpendicular_slices.append(square_region)
     
     return {
@@ -182,13 +179,53 @@ def are_neighbors(point1, point2):
     
     return abs(x1 - x2) <= 1 and abs(y1 - y2) <= 1 and (x1 != x2 or y1 != y2) 
 
+def is_connectable(mask, start_point, end_point):
+    """
+    Determine if two points can be connected within a binary mask.
+    
+    Args:
+    - mask: numpy array representing the binary mask
+    - start_point: tuple of (row, column) representing the starting point
+    - end_point: tuple of (row, column) representing the ending point
+    
+    Returns:
+    - True if the points can be connected, False otherwise
+    """
+    rows, cols = mask.shape
+    visited = np.zeros_like(mask, dtype=bool)
+    
+    # Check if start and end points are valid
+    if not (0 <= start_point[0] < rows and 0 <= start_point[1] < cols):
+        return False
+    if not (0 <= end_point[0] < rows and 0 <= end_point[1] < cols):
+        return False
+    
+    queue = deque([start_point])
+    
+    while queue:
+        current_point = queue.popleft()
+        
+        # Check if current point is the end point
+        if current_point[0] == end_point[0] and current_point[1] == end_point[1]:
+            return True
+        
+        # Explore neighbors
+        for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, -1), (-1, 1)]:
+            new_row, new_col = current_point[0] + dr, current_point[1] + dc
+            if (0 <= new_row < rows and 0 <= new_col < cols and
+                mask[new_row, new_col] == 1 and not visited[new_row, new_col]):
+                queue.append([new_row, new_col])
+                visited[new_row, new_col] = True
+                
+    return False
+
 def find_split_points(common_paths, original_data, mask_data, selected_data, skeleton_points, connected_lines):
     split_groups = []
     for path_index, path in enumerate(common_paths):
         split_group = []
         cube_size = original_data.shape
 
-        result = auto_select_slices(cube_size, path_index, skeleton_points, 10, common_paths, connected_lines)
+        result = auto_select_slices(cube_size, path_index, skeleton_points, 8, common_paths, connected_lines)
         axis = result['axis']
         start_point, end_point = result['head_points']
         
@@ -214,8 +251,6 @@ def find_split_points(common_paths, original_data, mask_data, selected_data, ske
             if boundaries.shape[0]:
                 min_coords = np.min(np.argwhere(slice==True), axis=0)
                 max_coords = np.max(np.argwhere(slice==True), axis=0)
-                # segment_slice = select_slice(mask_data, start_point + increment, axis, min_coords, max_coords)
-                # fixed_slice = select_slice(selected_data, start_point + increment, axis, min_coords, max_coords)
                 intensity_slice = select_slice(original_data, start_point + increment, axis, min_coords, max_coords)
                 segment_slice = select_slice(mask_data, start_point + increment, axis, min_coords, max_coords)
                 fixed_slice = select_slice(selected_data, start_point + increment, axis, min_coords, max_coords)
@@ -249,9 +284,6 @@ def find_split_points(common_paths, original_data, mask_data, selected_data, ske
                 max_indices_2d = np.unravel_index(max_indices, max_count.shape)
                 max_positions_pairs = list(zip(max_indices_2d[0], max_indices_2d[1]))
                 
-                if euclidean_distance(max_positions_pairs[0], max_positions_pairs[1]) == 1:
-                    num_slit_slices += 1
-                    
                 for pair in max_positions_pairs:
                     if axis == 0:
                         point = [pair[0], pair[1]]
@@ -266,11 +298,18 @@ def find_split_points(common_paths, original_data, mask_data, selected_data, ske
                     split_points.append(voxel_point)
                     fig_points.append(point)
                 
-                # visualize_slice(intensity_slice, segment_slice, fixed_slice, fig_points, start_point, increment, axis)
+                if euclidean_distance(max_positions_pairs[0], max_positions_pairs[1]) == 1 or not is_connectable(segment_slice, fig_points[0], fig_points[1]):
+                    num_slit_slices += 1
+
+                visualize_slice(intensity_slice, segment_slice, fixed_slice, fig_points, start_point, increment, axis)
         
-        if (num_slit_slices/num_slices >= 0.5):
+        slice_percent = num_slit_slices/num_slices
+        if (slice_percent >= 0.7):
+            print("Not split line")
             split_points = []
-            
+        else:
+            print("Split line")
+
         for new_point in split_points:
             point_index = skeleton_points.shape[0]
             skeleton_points = np.vstack([skeleton_points, new_point])

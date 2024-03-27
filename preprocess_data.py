@@ -1,5 +1,4 @@
 import nibabel as nib
-import open3d as o3d
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy import ndimage

@@ -898,34 +898,50 @@ def dfs_path_priority(start, end, connected_lines, skeleton_points, direction):
         sign = -1
         
     priority_queue = [(sign*skeleton_points[start][0], start, [start])]
-    visited = set()
+    visited = []
     
     while priority_queue:
-        neg_x, node_id, path = heapq.heappop(priority_queue)
-        current_node = path[-1]
+        ignore_paths = []
+        is_found = False
+
+        while len(priority_queue):
+            neg_x, node_id, path = heapq.heappop(priority_queue)
+
+            if len(visited) == 0 or path[-2] == visited[-1]:
+                is_found = True
+                break
+            else:
+                ignore_paths.append((neg_x, node_id, path))
         
-        print('Pop: ', neg_x, node_id, path)
+        for item in ignore_paths:
+            heapq.heappush(priority_queue, item)
+        
+        if not is_found:
+            neg_x, node_id, path = heapq.heappop(priority_queue)
+
+        current_node = path[-1]
+
         if current_node == end:
             return path  # Found the end node
 
-        visited.add(current_node)
+        visited.append(current_node)
 
         # Explore adjacent nodes
         adjacent = []
         for idx, line in enumerate(connected_lines):
             if current_node == line[0]:
-                adjacent.append([line[-1], idx, line[1]])
+                avg_x = np.mean(skeleton_points[line[1:3]][:, 0])
+                adjacent.append([line[-1], idx, avg_x])
             elif current_node == line[-1]:
-                adjacent.append([line[0], idx, line[-2]])
+                avg_x = np.mean(skeleton_points[line[-3:-1]][:, 0])
+                adjacent.append([line[0], idx, avg_x])
         
-        print('Push')
         for adj_node in adjacent:
             if adj_node[0] not in visited:
                 new_path = list(path)
                 new_path.append(adj_node[0])
                 # Priority is based on decreasing z-axis and number of nodes explored
-                priority = (sign*skeleton_points[adj_node[2]][0], -len(new_path), sign*skeleton_points[adj_node[0]][0])
-                print(adj_node[0], sign*skeleton_points[adj_node[2]][0], sign*skeleton_points[adj_node[0]][0])
+                priority = (sign*adj_node[2], -len(new_path))
                 heapq.heappush(priority_queue, (priority, adj_node[0], new_path))
 
     return None  # No path found
@@ -1017,7 +1033,6 @@ def find_branches(aca_endpoints, end_points, directions, skeleton_points, juncti
                 shortest_path = dfs_path_priority(point, endpoint, connected_lines, skeleton_points, directions[i])
                 list_paths.append(shortest_path)
         
-        print(list_paths)
         path_weights = {}
 
         for path in list_paths:

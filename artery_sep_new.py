@@ -8,7 +8,6 @@ from skimage import measure
 from scipy.spatial import KDTree, distance_matrix
 from sklearn.cluster import DBSCAN, KMeans
 
-from PIL import Image
 import matplotlib.pyplot as plt
 
 from preprocess_data import *
