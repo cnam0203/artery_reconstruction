@@ -210,8 +210,11 @@ def reconstruct_surface(segment_image,
         endpoint_vector = skeleton_points[aca_endpoints[0]] - skeleton_points[aca_endpoints[1]]
         common_paths, left_paths, right_paths, undefined_paths = find_branches(aca_endpoints, end_points, directions, skeleton_points, junction_points, edges, connected_lines, connected_points)
         skeleton_points, split_groups = find_split_points(common_paths, original_data, mask_data, cex_data, skeleton_points, connected_lines)
+        common_paths, undefined_paths, split_groups = correct_undefined_paths(common_paths, undefined_paths, split_groups)
+        split_paths, undefined_paths, connected_lines = connect_split_points(split_groups, skeleton_points, undefined_paths, connected_lines)
+        common_paths, left_paths, right_paths, connected_lines, defined_paths = connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths) 
 
-    line_groups = [common_paths, left_paths, right_paths, undefined_paths, ]
+    line_groups = [common_paths, left_paths, right_paths, undefined_paths]
     line_colors = ['red', 'blue', 'green', 'orange', ]
     for i, line_group in enumerate(line_groups):
         for line in line_group:
@@ -227,9 +230,9 @@ def reconstruct_surface(segment_image,
         
     show_figure([
                 visualized_skeleton_points, 
-                visualized_end_points, 
-                visualized_junction_points,
-                visualized_artery_points,
+                # visualized_end_points, 
+                # visualized_junction_points,
+                # visualized_artery_points,
             ] 
                 + line_traces
     )
@@ -246,8 +249,8 @@ if __name__ == "__main__":
     # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-61_acq-tof_angio_resampled.nii.gz'
     
     # 5-15
-    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1_run-1_mra_TOF.nii.gz'
+    segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/TOF_multiclass_segmentation.nii.gz'
+    original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1_run-1_mra_TOF.nii.gz'
     
     # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-4947_TOF_multiclass_segmentation.nii.gz'
     # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-4947_run-1_mra_TOF.nii.gz'
@@ -268,8 +271,8 @@ if __name__ == "__main__":
     # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1425_TOF_multiclass_segmentation.nii.gz'
     # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1425_run-1_mra_TOF.nii.gz'
     
-    segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2849_TOF_multiclass_segmentation.nii.gz'
-    original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2849_run-1_mra_TOF.nii.gz'
+    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2849_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2849_run-1_mra_TOF.nii.gz'
     
     # Load the NIfTI image
     segment_image = nib.load(segment_file_path)
@@ -279,8 +282,8 @@ if __name__ == "__main__":
     gaussian_sigma=2
     distance_threshold=20
     laplacian_iter = 5
-    neighbor_threshold_1 = 10
-    neighbor_threshold_2 = 20
+    neighbor_threshold_1 = 5
+    neighbor_threshold_2 = 15
  
     #Find skeleton
     reconstruct_surface(

@@ -1235,7 +1235,41 @@ def find_branches(aca_endpoints, end_points, directions, skeleton_points, juncti
 
     return common_paths, left_paths, right_paths, undefined_paths
 
-def connect_split_points(split_groups, skeleton_points):
+def direction_vector(p1, p2):
+    return np.array(p2) - np.array(p1)
+
+def angle_between(v1, v2):
+    dot_product = np.dot(v1, v2)
+    norms = np.linalg.norm(v1) * np.linalg.norm(v2)
+    if norms == 0:
+        return 0
+    return np.arccos(np.clip(dot_product / norms, -1.0, 1.0))
+
+def find_parallel_lines_top_view(p1, p2, p3, p4, skeleton_points):
+    direction_vector1 = direction_vector(skeleton_points[p1], skeleton_points[p3])
+    direction_vector2 = direction_vector(skeleton_points[p2], skeleton_points[p4])
+
+    # Project vectors onto the xy-plane (ignoring z-axis)
+    direction_vector1[2] = 0
+    direction_vector2[2] = 0
+
+    angle1 = angle_between(direction_vector1, direction_vector2)
+
+    direction_vector1 = direction_vector(skeleton_points[p1], skeleton_points[p4])
+    direction_vector2 = direction_vector(skeleton_points[p2], skeleton_points[p3])
+
+    # Project vectors onto the xy-plane (ignoring z-axis)
+    direction_vector1[2] = 0
+    direction_vector2[2] = 0
+
+    angle2 = angle_between(direction_vector1, direction_vector2)
+
+    if angle1 < angle2:
+        return (p1, p3), (p2, p4)
+    else:
+        return (p1, p4), (p2, p3)
+
+def connect_split_points(split_groups, skeleton_points, undefined_paths, connected_lines):
     split_paths = []
     
     for group in split_groups:
@@ -1244,30 +1278,34 @@ def connect_split_points(split_groups, skeleton_points):
         right_paths = []
         
         for i in range(0, len(group) - 1, 2):
-            point_1 = skeleton_points[group[i]]
-            point_2 = skeleton_points[group[i+1]]
             
             if i == 0:
                 left_paths.append(group[i])
                 right_paths.append(group[i+1])
             
             else:
-                left_point = skeleton_points[left_paths[-1]]
-                right_point = skeleton_points[right_paths[-1]]
-                
-                distance_1 = euclidean_distance(point_1, left_point)
-                distance_2 = euclidean_distance(point_1, right_point)
-                
-                if distance_1 < distance_2:
-                    left_paths.append(group[i])
-                    right_paths.append(group[i+1])
+                point_1 = group[i]
+                point_2 = group[i+1]
+
+                left_point = left_paths[-1]
+                right_point = right_paths[-1]
+
+                distance_11 = euclidean_distance(skeleton_points[point_1], skeleton_points[left_point])
+                distance_12 = euclidean_distance(skeleton_points[point_1], skeleton_points[right_point])
+                distance_21 = euclidean_distance(skeleton_points[point_2], skeleton_points[left_point])
+                distance_22 = euclidean_distance(skeleton_points[point_2], skeleton_points[right_point])
+
+                if distance_11 + distance_22 < distance_12 + distance_21:
+                    left_paths.append(point_1)
+                    right_paths.append(point_2)
                 else:
-                    left_paths.append(group[i+1])
-                    right_paths.append(group[i])
-                    
+                    left_paths.append(point_2)
+                    right_paths.append(point_1)
+
         split_paths.append([left_paths, right_paths])
     
-    return split_paths
+    # print(undefined_paths, connected_lines)
+    return split_paths, undefined_paths, connected_lines
 
 
 def find_adjacent_paths(common_point, left_paths, right_paths, connected_lines):
@@ -1314,7 +1352,6 @@ def find_shortest_distance(start_point, list_points):
 def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths):
     defined_paths = [False] * len(common_paths)
     is_found = True
-    loop = 0
     
     if len(left_paths) == 0 and len(right_paths) == 0 and len(common_paths) > 0:
         common_path = common_paths[0]
@@ -1336,29 +1373,19 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                 left_split_path = copy.deepcopy(split_paths[0][0])
                 right_split_path = copy.deepcopy(split_paths[0][1])
                 
-                
                 if head_pos == 0:
                     left_paths.append([split_paths[0][0][-1], split_paths[0][0][0]])
                     right_paths.append([split_paths[0][1][-1], split_paths[0][1][0]])
-                    # left_paths.append([split_paths[0][0][-1], common_point])
-                    # right_paths.append([split_paths[0][1][-1], common_point])
-                    # left_split_path.insert(0, common_point)
-                    # right_split_path.insert(0, common_point)
                     connected_lines.append(left_split_path)
                     connected_lines.append(right_split_path)
                 else:
                     left_paths.append([split_paths[0][0][-1], split_paths[0][0][0]])
                     right_paths.append([split_paths[0][1][-1], split_paths[0][1][0]])
-                    # left_paths.append([split_paths[0][0][0], common_point])
-                    # right_paths.append([split_paths[0][1][0], common_point])
-                    # left_split_path.append(common_point)
-                    # right_split_path.append(common_point)
                     connected_lines.append(left_split_path)
                     connected_lines.append(right_split_path)
                 break
     
-    while is_found and loop <= 1:
-        loop += 1
+    while is_found:
         is_found = False
         
         for idx, path in enumerate(common_paths):
@@ -1381,6 +1408,7 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                 
                 left_path = left_paths[left_path_idx]
                 right_path = right_paths[right_path_idx]
+
                 left_connected_line = connected_lines[left_connected_line_idx]
                 right_connected_line = connected_lines[right_connected_line_idx]
                 
@@ -1388,10 +1416,14 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                     adjacent_point = common_point_1
                     split_point_1 = split_path[0][0]
                     split_point_2 = split_path[1][0]
+                    next_split_point_1 = split_path[0][1]
+                    next_split_point_2 = split_path[1][1]
                 else:
                     adjacent_point = common_point_2
                     split_point_1 = split_path[0][-1]
                     split_point_2 = split_path[1][-1]
+                    next_split_point_1 = split_path[0][-2]
+                    next_split_point_2 = split_path[1][-2]
                     
                 shortest_distance_11, point_11 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[left_connected_line])
                 shortest_distance_12, point_12 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[right_connected_line])
@@ -1403,69 +1435,69 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                     defined_paths[idx] = [0, 1]
                     
                     if selected_point == 0:
-                        left_paths.append([split_path[0][0], common_point_2])
-                        right_paths.append([split_path[1][0], common_point_2])
+                        left_paths.append([next_split_point_1, common_point_2])
+                        right_paths.append([next_split_point_2, common_point_2])
                     else:
-                        left_paths.append([split_path[0][-1], common_point_1])
-                        right_paths.append([split_path[1][-1], common_point_1])
+                        left_paths.append([next_split_point_1, common_point_1])
+                        right_paths.append([next_split_point_2, common_point_1])
                     
                     if left_path[0] == adjacent_point:
-                        left_paths[left_path_idx][0] = split_point_1
+                        left_paths[left_path_idx][0] = next_split_point_1
                     else:
-                        left_paths[left_path_idx][-1] = split_point_1
+                        left_paths[left_path_idx][-1] = next_split_point_1
                         
                     if right_path[0] == adjacent_point:
-                        right_paths[right_path_idx][0] = split_point_2
+                        right_paths[right_path_idx][0] = next_split_point_2
                     else:
-                        right_paths[right_path_idx][-1] = split_point_2
+                        right_paths[right_path_idx][-1] = next_split_point_2
                         
                     if left_connected_line[0] == adjacent_point:
-                        new_left_line = copy.deepcopy(left_connected_line[point_11:])
-                        new_left_line.insert(0, split_point_1)
+                        new_left_line = copy.deepcopy(left_connected_line)
+                        new_left_line[0] = next_split_point_1
                     else:
-                        new_left_line = copy.deepcopy(left_connected_line[0:point_11+1])
-                        new_left_line.append(split_point_1)
+                        new_left_line = copy.deepcopy(left_connected_line)
+                        new_left_line[-1] = next_split_point_1
                     
                         
                     if right_connected_line[0] == adjacent_point:
-                        new_right_line = copy.deepcopy(right_connected_line[point_22:])
-                        new_right_line.insert(0, split_point_2)
+                        new_right_line = copy.deepcopy(right_connected_line)
+                        new_right_line[0] = next_split_point_2
                     else:    
-                        new_right_line = copy.deepcopy(right_connected_line[0:point_22+1])
-                        new_right_line.append(split_point_2)
+                        new_right_line = copy.deepcopy(right_connected_line)
+                        new_right_line[-1] = next_split_point_2
                     
                 else:
                     defined_paths[idx] = [1, 0]
                     if selected_point == 0:
-                        left_paths.append([split_path[1][0], common_point_2])
-                        right_paths.append([split_path[0][0], common_point_2])
+                        left_paths.append([next_split_point_2, common_point_2])
+                        right_paths.append([next_split_point_1, common_point_2])
                     else:
-                        left_paths.append([split_path[1][-1], common_point_1])
-                        right_paths.append([split_path[0][-1], common_point_1])
+                        left_paths.append([next_split_point_2, common_point_1])
+                        right_paths.append([next_split_point_1, common_point_1])
                     
                     if left_path[0] == adjacent_point:
-                        left_paths[left_path_idx][0] = split_point_2
+                        left_paths[left_path_idx][0] = next_split_point_2
                     else:
-                        left_paths[left_path_idx][-1] = split_point_2
+                        left_paths[left_path_idx][-1] = next_split_point_2
                         
                     if right_path[0] == adjacent_point:
-                        right_paths[right_path_idx][0] = split_point_1
+                        right_paths[right_path_idx][0] = next_split_point_1
                     else:
-                        right_paths[right_path_idx][-1] = split_point_1
+                        right_paths[right_path_idx][-1] = next_split_point_1
                         
                     if left_connected_line[0] == adjacent_point:
-                        new_left_line = copy.deepcopy(left_connected_line[point_21:])
-                        new_left_line.insert(0, split_point_2)
+                        new_left_line = copy.deepcopy(left_connected_line)
+                        new_left_line[0] = next_split_point_2
                     else:
-                        new_left_line = copy.deepcopy(left_connected_line[0:point_21+1])
-                        new_left_line.append(split_point_2)
+                        new_left_line = copy.deepcopy(left_connected_line)
+                        new_left_line[-1] = next_split_point_2
                     
                     if right_connected_line[0] == adjacent_point:
-                        new_right_line = copy.deepcopy(right_connected_line[point_12:])
-                        new_right_line.insert(0, split_point_1)
+                        new_right_line = copy.deepcopy(right_connected_line)
+                        new_right_line[0] = next_split_point_1
                     else:    
-                        new_right_line = copy.deepcopy(right_connected_line[0:point_12+1])
-                        new_right_line.append(split_point_1)
+                        new_right_line = copy.deepcopy(right_connected_line)
+                        new_right_line[-1] = next_split_point_1
                 
                 for i in sorted([left_connected_line_idx, right_connected_line_idx], reverse=True):
                     del connected_lines[i]
@@ -1477,9 +1509,13 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                 split_path_2 = copy.deepcopy(split_path[1])
                 
                 if selected_point == 0:
+                    del split_path_1[0]
+                    del split_path_2[0]
                     split_path_1.append(common_point_2)
                     split_path_2.append(common_point_2)
                 else:
+                    del split_path_1[-1]
+                    del split_path_2[-1]
                     split_path_1.insert(0, common_point_1)
                     split_path_2.insert(0, common_point_1)
                 
@@ -1487,129 +1523,155 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                 connected_lines.append(split_path_2)
                 
     
-    
-    ajacent_left_points = {}
-    ajacent_right_points = {}
-    
-    for i, path in enumerate(left_paths):
-        point_1 = path[0]
-        point_2 = path[1]
-        
-        if point_1 not in ajacent_left_points:
-            ajacent_left_points[point_1] = []
-        if point_2 not in ajacent_left_points:
-            ajacent_left_points[point_2] = []
-        
-        if len(path) > 1:
-            ajacent_left_points[point_1].append(i)
-            ajacent_left_points[point_2].append(i)
-    
-    for i, path in enumerate(right_paths):
-        point_1 = path[0]
-        point_2 = path[1]
-        
-        if point_1 not in ajacent_right_points:
-            ajacent_right_points[point_1] = []
-        if point_2 not in ajacent_right_points:
-            ajacent_right_points[point_2] = []
-        
-        if len(path) > 1:
-            ajacent_right_points[point_1].append(i)
-            ajacent_right_points[point_2].append(i)
-    
-    
-    adjacent_points = []
-    new_lines = []
-    list_idx = []
-    
-    for key in ajacent_left_points:
-        if len(ajacent_left_points[key]) == 2:
-            if key in ajacent_right_points:
-                if len(ajacent_right_points[key]) == 2:
-                    two_left_paths = ajacent_left_points[key]
-                    two_right_paths = ajacent_right_points[key]
-                    
-                    left_path_1 = left_paths[two_left_paths[0]]
-                    left_path_2 = left_paths[two_left_paths[1]]
-                    
-                    connected_point_11, connected_point_12 = None, None
-                    path_11, path_12 = None, None
-                    
-                    for idx, line in enumerate(connected_lines):
-                        if (line[0] == left_path_1[0] and line[-1] == left_path_1[-1]) or (line[0] == left_path_1[-1] and line[-1] == left_path_1[0]):
-                            list_idx.append(idx)
-                            path_11 = line
-                        elif (line[0] == left_path_2[0] and line[-1] == left_path_2[-1]) or (line[0] == left_path_2[-1] and line[-1] == left_path_2[0]):
-                            list_idx.append(idx)
-                            path_12 = line
-                            
-                    new_line_11 = []
-                    new_line_12 = []
-                    
-                    if path_11[0] == key:
-                        connected_point_11 = path_11[1]
-                        new_line_11 = copy.deepcopy(path_11)[1:]
-                        left_paths[two_left_paths[0]][0] = connected_point_11
-                    else:
-                        connected_point_11 = path_11[-2]
-                        new_line_11 = copy.deepcopy(path_11)[0:-1]
-                        left_paths[two_left_paths[0]][-1] = connected_point_11
-                    
-                    if path_12[0] == key:
-                        connected_point_12 = path_12[1]
-                        new_line_12 = copy.deepcopy(path_12)[1:]
-                        left_paths[two_left_paths[1]][0] = connected_point_12
-                    else:
-                        connected_point_12 = path_12[-2]
-                        new_line_12 = copy.deepcopy(path_12)[0:-1]
-                        left_paths[two_left_paths[1]][-1] = connected_point_12
-            
-                    left_paths.append([connected_point_11, connected_point_12])
-                    new_lines = new_lines + [new_line_11, new_line_12, [connected_point_11, connected_point_12]]
-    
-                    right_path_1 = right_paths[two_right_paths[0]]
-                    right_path_2 = right_paths[two_right_paths[1]]
-                    
-                    connected_point_21, connected_point_22 = None, None
-                    path_21, path_22 = None, None
-                    
-                    for idx, line in enumerate(connected_lines):
-                        if (line[0] == right_path_1[0] and line[-1] == right_path_1[-1]) or (line[0] == right_path_1[-1] and line[-1] == right_path_1[0]):
-                            list_idx.append(idx)
-                            path_21 = line
-                        elif (line[0] == right_path_2[0] and line[-1] == right_path_2[-1]) or (line[0] == right_path_2[-1] and line[-1] == right_path_2[0]):
-                            list_idx.append(idx)
-                            path_22 = line
-                            
-                    new_line_21 = []
-                    new_line_22 = []
-                    
-                    if path_21[0] == key:
-                        connected_point_21 = path_21[1]
-                        new_line_21 = copy.deepcopy(path_21)[1:]
-                        right_paths[two_right_paths[0]][0] = connected_point_21
-                    else:
-                        connected_point_21 = path_21[-2]
-                        new_line_21 = copy.deepcopy(path_21)[0:-1]
-                        right_paths[two_right_paths[0]][-1] = connected_point_21
-                    
-                    if path_22[0] == key:
-                        connected_point_22 = path_22[1]
-                        new_line_22 = copy.deepcopy(path_22)[1:]
-                        right_paths[two_right_paths[1]][0] = connected_point_22
-                    else:
-                        connected_point_22 = path_22[-2]
-                        new_line_22 = copy.deepcopy(path_22)[0:-1]
-                        right_paths[two_right_paths[1]][-1] = connected_point_22
-            
-                    right_paths.append([connected_point_21, connected_point_22])
-                    new_lines = new_lines + [new_line_21, new_line_22, [connected_point_21, connected_point_22]]
-                    
-    for i in sorted(list_idx, reverse=True):
-        del connected_lines[i]
+    is_found = True
 
-    for line in new_lines:
-        connected_lines.append(line)
+    while is_found:
+        is_found = False
+        ajacent_left_points = {}
+        ajacent_right_points = {}
+        
+        for i, path in enumerate(left_paths):
+            point_1 = path[0]
+            point_2 = path[1]
+            
+            if point_1 not in ajacent_left_points:
+                ajacent_left_points[point_1] = []
+            if point_2 not in ajacent_left_points:
+                ajacent_left_points[point_2] = []
+            
+            if len(path) > 1:
+                ajacent_left_points[point_1].append(i)
+                ajacent_left_points[point_2].append(i)
+        
+        for i, path in enumerate(right_paths):
+            point_1 = path[0]
+            point_2 = path[1]
+            
+            if point_1 not in ajacent_right_points:
+                ajacent_right_points[point_1] = []
+            if point_2 not in ajacent_right_points:
+                ajacent_right_points[point_2] = []
+            
+            if len(path) > 1:
+                ajacent_right_points[point_1].append(i)
+                ajacent_right_points[point_2].append(i)
+
+        adjacent_points = []
+        new_lines = []
+        list_idx = []
+        
+        for key in ajacent_left_points:
+            if len(ajacent_left_points[key]) == 2:
+                if key in ajacent_right_points:
+                    if len(ajacent_right_points[key]) == 2:
+                        is_found = True
+
+                        two_left_paths = ajacent_left_points[key]
+                        two_right_paths = ajacent_right_points[key]
+                        
+                        left_path_1 = left_paths[two_left_paths[0]]
+                        left_path_2 = left_paths[two_left_paths[1]]
+                        
+                        connected_point_11, connected_point_12 = None, None
+                        path_11, path_12 = None, None
+                        
+                        for idx, line in enumerate(connected_lines):
+                            if (line[0] == left_path_1[0] and line[-1] == left_path_1[-1]) or (line[0] == left_path_1[-1] and line[-1] == left_path_1[0]):
+                                list_idx.append(idx)
+                                path_11 = line
+                            elif (line[0] == left_path_2[0] and line[-1] == left_path_2[-1]) or (line[0] == left_path_2[-1] and line[-1] == left_path_2[0]):
+                                list_idx.append(idx)
+                                path_12 = line
+                                
+                        new_line_11 = []
+                        new_line_12 = []
+                        
+                        if path_11[0] == key:
+                            connected_point_11 = path_11[1]
+                            new_line_11 = copy.deepcopy(path_11)[1:]
+                            left_paths[two_left_paths[0]][0] = connected_point_11
+                        else:
+                            connected_point_11 = path_11[-2]
+                            new_line_11 = copy.deepcopy(path_11)[0:-1]
+                            left_paths[two_left_paths[0]][-1] = connected_point_11
+
+                        if  left_paths[two_left_paths[0]][0] == key: 
+                            left_paths[two_left_paths[0]][0] = connected_point_11
+                        else:
+                            left_paths[two_left_paths[0]][-1] = connected_point_11
+                        
+                        if path_12[0] == key:
+                            connected_point_12 = path_12[1]
+                            new_line_12 = copy.deepcopy(path_12)[1:]
+                            left_paths[two_left_paths[1]][0] = connected_point_12
+                        else:
+                            connected_point_12 = path_12[-2]
+                            new_line_12 = copy.deepcopy(path_12)[0:-1]
+                            left_paths[two_left_paths[1]][-1] = connected_point_12
+
+                        if  left_paths[two_left_paths[1]][0] == key: 
+                            left_paths[two_left_paths[1]][0] = connected_point_12
+                        else:
+                            left_paths[two_left_paths[1]][-1] = connected_point_12
+                
+                        left_paths.append([connected_point_11, connected_point_12])
+                        new_lines = new_lines + [new_line_11, new_line_12, [connected_point_11, connected_point_12]]
+        
+                        right_path_1 = right_paths[two_right_paths[0]]
+                        right_path_2 = right_paths[two_right_paths[1]]
+                        
+                        connected_point_21, connected_point_22 = None, None
+                        path_21, path_22 = None, None
+                        
+                        for idx, line in enumerate(connected_lines):
+                            if (line[0] == right_path_1[0] and line[-1] == right_path_1[-1]) or (line[0] == right_path_1[-1] and line[-1] == right_path_1[0]):
+                                list_idx.append(idx)
+                                path_21 = line
+                            elif (line[0] == right_path_2[0] and line[-1] == right_path_2[-1]) or (line[0] == right_path_2[-1] and line[-1] == right_path_2[0]):
+                                list_idx.append(idx)
+                                path_22 = line
+                                
+                        new_line_21 = []
+                        new_line_22 = []
+
+                        if path_21[0] == key:
+                            connected_point_21 = path_21[1]
+                            new_line_21 = copy.deepcopy(path_21)[1:]
+                            right_paths[two_right_paths[0]][0] = connected_point_21
+                        else:
+                            connected_point_21 = path_21[-2]
+                            new_line_21 = copy.deepcopy(path_21)[0:-1]
+                            right_paths[two_right_paths[0]][-1] = connected_point_21
+
+                        if  right_paths[two_right_paths[0]][0] == key: 
+                            right_paths[two_right_paths[0]][0] = connected_point_21
+                        else:
+                            right_paths[two_right_paths[0]][-1] = connected_point_21
+
+                        if path_22[0] == key:
+                            connected_point_22 = path_22[1]
+                            new_line_22 = copy.deepcopy(path_22)[1:]
+                            right_paths[two_right_paths[1]][0] = connected_point_22
+                        else:
+                            connected_point_22 = path_22[-2]
+                            new_line_22 = copy.deepcopy(path_22)[0:-1]
+                            right_paths[two_right_paths[1]][-1] = connected_point_22
+                        
+                        if  right_paths[two_right_paths[1]][0] == key: 
+                            right_paths[two_right_paths[1]][0] = connected_point_22
+                        else:
+                            right_paths[two_right_paths[1]][-1] = connected_point_22
+
+                        right_paths.append([connected_point_21, connected_point_22])
+                        new_lines = new_lines + [new_line_21, new_line_22, [connected_point_21, connected_point_22]]
+
+                        for i in sorted(list_idx, reverse=True):
+                            del connected_lines[i]
+
+                        for line in new_lines:
+                            connected_lines.append(line)
+                        
+                        break
     
     return common_paths, left_paths, right_paths, connected_lines, defined_paths
                 
@@ -2095,6 +2157,7 @@ def correct_undefined_paths(common_paths, undefined_paths, split_groups):
 
     for i in sorted(remove_idx, reverse=True):
         del common_paths[i]
+        del split_groups[i]
         
-    return common_paths, undefined_paths
+    return common_paths, undefined_paths, split_groups
     

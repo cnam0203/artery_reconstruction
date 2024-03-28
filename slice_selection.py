@@ -301,7 +301,7 @@ def find_split_points(common_paths, original_data, mask_data, selected_data, ske
                 if euclidean_distance(max_positions_pairs[0], max_positions_pairs[1]) == 1 or not is_connectable(segment_slice, fig_points[0], fig_points[1]):
                     num_slit_slices += 1
 
-                visualize_slice(intensity_slice, segment_slice, fixed_slice, fig_points, start_point, increment, axis)
+                # visualize_slice(intensity_slice, segment_slice, fixed_slice, fig_points, start_point, increment, axis)
         
         slice_percent = num_slit_slices/num_slices
         if (slice_percent >= 0.7):
