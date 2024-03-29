@@ -212,8 +212,14 @@ def reconstruct_surface(segment_image,
         skeleton_points, split_groups = find_split_points(common_paths, original_data, mask_data, cex_data, skeleton_points, connected_lines)
         common_paths, undefined_paths, split_groups = correct_undefined_paths(common_paths, undefined_paths, split_groups)
         split_paths, undefined_paths, connected_lines = connect_split_points(split_groups, skeleton_points, undefined_paths, connected_lines)
-        common_paths, left_paths, right_paths, connected_lines, defined_paths = connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths) 
-
+        common_paths, left_paths, right_paths, connected_lines, defined_paths, expanded_points = connect_common_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths) 
+        left_paths, right_paths, undefined_paths, connected_lines = connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points, expanded_points)
+        common_paths, left_paths, right_paths, connected_lines, defined_paths, expanded_points = connect_common_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths) 
+        skeleton_points, connected_lines = reinterpolate_connected_lines(skeleton_points, connected_lines)
+        left_points, right_points = extract_point_position(skeleton_points, connected_lines, left_paths, right_paths)
+        touch_points, artery_data = find_touchpoints(mask_data, left_points, right_points, 1)
+        visualize_artery_mesh(artery_data, voxel_sizes, [1, 2], folder_path)
+        
     line_groups = [common_paths, left_paths, right_paths, undefined_paths]
     line_colors = ['red', 'blue', 'green', 'orange', ]
     for i, line_group in enumerate(line_groups):
@@ -243,36 +249,39 @@ if __name__ == "__main__":
 
     # Calculate runtime - record start time
     start_time = time.time()
+    dataset_dir = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/'
 
     # Specify the path to your NIfTI file
     # segment_file_path =  'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub61_harvard_watershed.nii.gz'
-    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-61_acq-tof_angio_resampled.nii.gz'
+    # original_file_path = dataset_dir + 'sub-61_acq-tof_angio_resampled.nii.gz'
     
     # 5-15
-    segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/TOF_multiclass_segmentation.nii.gz'
-    original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1_run-1_mra_TOF.nii.gz'
+    # segment_file_path = dataset_dir + 'TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-1_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-4947_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-4947_run-1_mra_TOF.nii.gz'
+    # segment_file_path = dataset_dir + 'sub-4947_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-4947_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2983_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2983_run-1_mra_TOF.nii.gz'
+    # segment_file_path = dataset_dir + 'sub-2983_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-2983_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-11_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-11_run-1_mra_TOF.nii.gz'
+    # segment_file_path = dataset_dir + 'sub-11_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-11_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1057_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1057_run-1_mra_TOF.nii.gz'
+    # segment_file_path = dataset_dir + 'sub-1057_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-1057_run-1_mra_TOF.nii.gz'
+    
+    # segment_file_path = dataset_dir + 'sub-2849_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-2849_run-1_mra_TOF.nii.gz'
     
     # 10-20
-    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2049_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2049_run-1_mra_TOF.nii.gz'
+    # segment_file_path = dataset_dir + 'sub-2049_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-2049_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1425_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1425_run-1_mra_TOF.nii.gz'
+    # segment_file_path = dataset_dir + 'sub-1425_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-1425_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2849_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2849_run-1_mra_TOF.nii.gz'
+    
     
     # Load the NIfTI image
     segment_image = nib.load(segment_file_path)

@@ -1349,9 +1349,10 @@ def find_shortest_distance(start_point, list_points):
     return min_distance, min_index
 
 
-def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths):
+def connect_common_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths):
     defined_paths = [False] * len(common_paths)
     is_found = True
+    expanded_points = {}
     
     if len(left_paths) == 0 and len(right_paths) == 0 and len(common_paths) > 0:
         common_path = common_paths[0]
@@ -1383,6 +1384,8 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                     right_paths.append([split_paths[0][1][-1], split_paths[0][1][0]])
                     connected_lines.append(left_split_path)
                     connected_lines.append(right_split_path)
+                    
+                expanded_points[common_point] = [connected_lines[-2], connected_lines[-1]]
                 break
     
     while is_found:
@@ -1425,10 +1428,20 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                     next_split_point_1 = split_path[0][-2]
                     next_split_point_2 = split_path[1][-2]
                     
-                shortest_distance_11, point_11 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[left_connected_line])
-                shortest_distance_12, point_12 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[right_connected_line])
-                shortest_distance_21, point_21 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[left_connected_line])
-                shortest_distance_22, point_22 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[right_connected_line])
+                if left_connected_line[0] == adjacent_point:
+                    left_points = left_connected_line[2:]
+                else:
+                    left_points = left_connected_line[:-2]
+                
+                if right_connected_line[0] == adjacent_point:
+                    right_points = right_connected_line[2:]
+                else:
+                    right_points = right_connected_line[:-2]
+                    
+                shortest_distance_11, point_11 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[left_points])
+                shortest_distance_12, point_12 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[right_points])
+                shortest_distance_21, point_21 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[left_points])
+                shortest_distance_22, point_22 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[right_points])
                 min_distance = min(shortest_distance_11, shortest_distance_12, shortest_distance_21, shortest_distance_22)
                 
                 if min_distance == shortest_distance_11 or min_distance == shortest_distance_22:
@@ -1505,6 +1518,8 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                 connected_lines.append(new_left_line)
                 connected_lines.append(new_right_line)
                 
+                expanded_points[adjacent_point] = [connected_lines[-2], connected_lines[-1]]
+                
                 split_path_1 = copy.deepcopy(split_path[0])
                 split_path_2 = copy.deepcopy(split_path[1])
                 
@@ -1555,16 +1570,14 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
             if len(path) > 1:
                 ajacent_right_points[point_1].append(i)
                 ajacent_right_points[point_2].append(i)
-
-        adjacent_points = []
-        new_lines = []
-        list_idx = []
         
         for key in ajacent_left_points:
             if len(ajacent_left_points[key]) == 2:
                 if key in ajacent_right_points:
                     if len(ajacent_right_points[key]) == 2:
                         is_found = True
+                        new_lines = []
+                        list_idx = []
 
                         two_left_paths = ajacent_left_points[key]
                         two_right_paths = ajacent_right_points[key]
@@ -1671,9 +1684,10 @@ def connect_paths(common_paths, left_paths, right_paths, connected_lines, split_
                         for line in new_lines:
                             connected_lines.append(line)
                         
+                        expanded_points[key] = [connected_lines[-4], connected_lines[-1]]
                         break
     
-    return common_paths, left_paths, right_paths, connected_lines, defined_paths
+    return common_paths, left_paths, right_paths, connected_lines, defined_paths, expanded_points
                 
 def find_neighbor_point(path, connected_lines, pos):
     for idx, line in enumerate(connected_lines):
@@ -1694,212 +1708,459 @@ def swap_values(x):
     return -1 if x == 0 else 0 if x == -1 else x
 
 
-def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points):
+# def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points):
+#     remove_idx = []
+    
+#     for idx, common_path in enumerate(common_paths):
+#         if defined_paths[idx]:
+#             common_path_idx_0 = []
+#             common_path_idx_1 = []
+#             common_path_pos_0 = []
+#             common_path_pos_1 = []
+#             remove_idx = []
+            
+#             for path_idx, path in enumerate(undefined_paths):
+#                 if (path[0] == common_path[0]):
+#                     common_path_idx_0.append(path_idx)
+#                     common_path_pos_0.append(0)
+#                 elif (path[0] == common_path[-1]):
+#                     common_path_idx_1.append(path_idx)
+#                     common_path_pos_1.append(0)
+#                 elif (path[-1] == common_path[0]):
+#                     common_path_idx_0.append(path_idx)
+#                     common_path_pos_0.append(-1)
+#                 elif (path[-1] == common_path[-1]):
+#                     common_path_idx_1.append(path_idx)
+#                     common_path_pos_1.append(-1)
+                    
+#             if len(common_path_idx_0) == 2:
+#                 remove_idx = common_path_idx_0
+#                 path_1 = undefined_paths[common_path_idx_0[0]]
+#                 path_2 = undefined_paths[common_path_idx_0[1]]
+#                 touch_point_1 = common_path_pos_0[0]
+#                 touch_point_2 = common_path_pos_0[1]
+#                 split_point_1, con_line_idx_1, head_point_1 = find_neighbor_point(path_1, connected_lines, touch_point_1)
+#                 split_point_2, con_line_idx_2, head_point_2 = find_neighbor_point(path_2, connected_lines,  touch_point_2)
+#                 left_connected_line = split_paths[idx][0]
+#                 right_connected_line = split_paths[idx][1]
+                
+#                 shortest_distance_11, point_11 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[left_connected_line])
+#                 shortest_distance_12, point_12 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[right_connected_line])
+#                 shortest_distance_21, point_21 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[left_connected_line])
+#                 shortest_distance_22, point_22 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[right_connected_line])
+#                 min_distance = min(shortest_distance_11, shortest_distance_12, shortest_distance_21, shortest_distance_22)
+                
+#                 if (min_distance == shortest_distance_11) or (min_distance == shortest_distance_22):
+#                     path_dir_1 = defined_paths[idx][0]
+#                     add_point_1 = left_connected_line[point_11]
+#                     add_point_2 = right_connected_line[point_22]
+#                 else:
+#                     path_dir_1 = defined_paths[idx][1]
+#                     add_point_1 = right_connected_line[point_12]
+#                     add_point_2 = left_connected_line[point_21]
+                    
+#                 if head_point_1 == 0:
+#                     new_path_1 = [connected_lines[con_line_idx_1][-1], add_point_1]
+#                     connected_lines[con_line_idx_1][0] = add_point_1
+#                 else:
+#                     new_path_1 = [connected_lines[con_line_idx_1][0], add_point_1]
+#                     connected_lines[con_line_idx_1][-1] = add_point_1
+                
+#                 if head_point_2 == 0:
+#                     new_path_2 = [connected_lines[con_line_idx_2][-1], add_point_2]
+#                     connected_lines[con_line_idx_2][0] = add_point_2
+#                 else:
+#                     new_path_2 = [connected_lines[con_line_idx_2][0], add_point_2]
+#                     connected_lines[con_line_idx_2][-1] = add_point_2
+                    
+#                 if path_dir_1 == 0:  
+#                     left_paths.append(new_path_1)
+#                     right_paths.append(new_path_2)
+#                 else:
+#                     left_paths.append(new_path_2)
+#                     right_paths.append(new_path_1)
+                        
+#             if len(common_path_idx_1) == 2:
+#                 remove_idx = remove_idx + common_path_idx_1
+#                 path_1 = undefined_paths[common_path_idx_1[0]]
+#                 path_2 = undefined_paths[common_path_idx_1[1]]
+#                 touch_point_1 = common_path_pos_1[0]
+#                 touch_point_2 = common_path_pos_1[1]
+#                 split_point_1, con_line_idx_1, head_point_1 = find_neighbor_point(path_1, connected_lines, touch_point_1)
+#                 split_point_2, con_line_idx_2, head_point_2 = find_neighbor_point(path_2, connected_lines,  touch_point_2)
+#                 left_connected_line = split_paths[idx][0]
+#                 right_connected_line = split_paths[idx][1]
+                
+#                 shortest_distance_11, point_11 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[left_connected_line])
+#                 shortest_distance_12, point_12 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[right_connected_line])
+#                 shortest_distance_21, point_21 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[left_connected_line])
+#                 shortest_distance_22, point_22 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[right_connected_line])
+#                 min_distance = min(shortest_distance_11, shortest_distance_12, shortest_distance_21, shortest_distance_22)
+                
+#                 if (min_distance == shortest_distance_11) or (min_distance == shortest_distance_22):
+#                     path_dir_1 = defined_paths[idx][0]
+#                     add_point_1 = left_connected_line[point_11]
+#                     add_point_2 = right_connected_line[point_22]
+#                 else:
+#                     path_dir_1 = defined_paths[idx][1]
+#                     add_point_1 = right_connected_line[point_12]
+#                     add_point_2 = left_connected_line[point_21]
+                
+#                 if head_point_1 == 0:
+#                     new_path_1 = [connected_lines[con_line_idx_1][-1], add_point_1]
+#                     connected_lines[con_line_idx_1][0] = add_point_1
+#                 else:
+#                     new_path_1 = [connected_lines[con_line_idx_1][0], add_point_1]
+#                     connected_lines[con_line_idx_1][-1] = add_point_1
+                
+#                 if head_point_2 == 0:
+#                     new_path_2 = [connected_lines[con_line_idx_2][-1], add_point_2]
+#                     connected_lines[con_line_idx_2][0] = add_point_2
+#                 else:
+#                     new_path_2 = [connected_lines[con_line_idx_2][0], add_point_2]
+#                     connected_lines[con_line_idx_2][-1] = add_point_2
+                
+#                 if path_dir_1 == 0:  
+#                     left_paths.append(new_path_1)
+#                     right_paths.append(new_path_2)
+#                 else:
+#                     left_paths.append(new_path_2)
+#                     right_paths.append(new_path_1)
+        
+#             for i in sorted(remove_idx, reverse=True):
+#                 del undefined_paths[i]
+    
+#     remove_idx = []   
+#     for path_idx, path in enumerate(undefined_paths):
+#         for idx, common_path in enumerate(common_paths):
+#             split_path = split_paths[idx]
+#             path_1 = split_path[0]
+#             path_2 = split_path[1]
+            
+#             distance_1, distance_2 = None, None
+#             path_dir = None
+#             touch_point = None
+#             new_connect_point = None
+            
+#             if path[0] == common_path[0]:
+#                 touch_point = 0
+#                 new_connect_point = 0
+#                 distance_1 = euclidean_distance(skeleton_points[path[0]], skeleton_points[path_1[0]])
+#                 distance_2 = euclidean_distance(skeleton_points[path[0]], skeleton_points[path_2[0]])
+#             elif path[0] == common_path[-1]:
+#                 touch_point = 0
+#                 new_connect_point = -1
+#                 distance_1 = euclidean_distance(skeleton_points[path[0]], skeleton_points[path_1[-1]])
+#                 distance_2 = euclidean_distance(skeleton_points[path[0]], skeleton_points[path_2[-1]])
+#             elif path[-1] == common_path[0]:
+#                 touch_point = -1
+#                 new_connect_point = 0
+#                 distance_1 = euclidean_distance(skeleton_points[path[-1]], skeleton_points[path_1[0]])
+#                 distance_2 = euclidean_distance(skeleton_points[path[-1]], skeleton_points[path_2[0]])
+#             elif path[-1] == common_path[-1]:
+#                 touch_point = -1
+#                 new_connect_point = -1
+#                 distance_1 = euclidean_distance(skeleton_points[path[-1]], skeleton_points[path_1[-1]])
+#                 distance_2 = euclidean_distance(skeleton_points[path[-1]], skeleton_points[path_2[-1]])
+            
+#             if distance_1 is not None and distance_2 is not None:
+#                 _, con_line_idx, head_point = find_neighbor_point(path, connected_lines, touch_point)
+                
+#                 if distance_1 < distance_2: 
+#                     new_path = [path[swap_values(touch_point)], path_1[new_connect_point]]
+#                     path_dir = defined_paths[idx][0]
+#                     connected_lines[con_line_idx][swap_values(head_point)] = path_1[new_connect_point]
+#                 else:
+#                     new_path = [path[swap_values(touch_point)], path_2[new_connect_point]]
+#                     path_dir = defined_paths[idx][1]
+#                     connected_lines[con_line_idx][swap_values(head_point)] = path_2[new_connect_point]
+                
+#                 if path_dir == 0:
+#                     left_paths.append(new_path)
+#                 else:
+#                     right_paths.append(new_path)
+                    
+#                 remove_idx.append(path_idx)
+#                 break
+    
+#     for i in sorted(remove_idx, reverse=True):
+#         del undefined_paths[i]
+        
+#     is_found = True
+    
+#     while is_found:
+#         is_found = False
+        
+#         remove_idx = []
+#         for idx, path in enumerate(undefined_paths):
+#             for left_path in left_paths:
+#                 if path[0] == left_path[0] or path[0] == left_path[-1] or path[-1] == left_path[-1] or path[-1] == left_path[0]:
+#                     left_paths.append(path)
+#                     remove_idx.append(idx)
+#                     is_found = True
+#                     break
+                
+#             if is_found == False:
+#                 for right_path in right_paths:
+#                     if path[0] == right_path[0] or path[0] == right_path[-1] or path[-1] == right_path[-1] or path[-1] == right_path[0]:
+#                         right_paths.append(path)
+#                         remove_idx.append(idx)
+#                         is_found = True
+#                         break
+                
+#         for i in sorted(remove_idx, reverse=True):
+#             del undefined_paths[i]
+    
+        
+#     return left_paths, right_paths, undefined_paths, connected_lines
+
+def distance_point_to_line(idx_1, idx_2, idx_3, skeleton_points):
+    p1 = skeleton_points[idx_1]
+    p2 = skeleton_points[idx_2]
+    p3 = skeleton_points[idx_3]
+    
+    # Vector representing the line segment (p2, p3)
+    line_vector = p3 - p2
+
+    # Vector from p2 to p1
+    point_vector = p1 - p2
+
+    # Calculate the cross product
+    cross_product = np.cross(line_vector, point_vector)
+
+    # Calculate the distance
+    distance = np.linalg.norm(cross_product) / np.linalg.norm(line_vector)
+    if np.linalg.norm(p1 - p2) < np.linalg.norm(p1 - p3):
+        nearest_point = idx_2
+    else:
+        nearest_point = idx_3
+
+    return distance, nearest_point
+
+def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points, expanded_points):
     remove_idx = []
     
-    for idx, common_path in enumerate(common_paths):
-        if defined_paths[idx]:
-            common_path_idx_0 = []
-            common_path_idx_1 = []
-            common_path_pos_0 = []
-            common_path_pos_1 = []
-            remove_idx = []
-            
-            for path_idx, path in enumerate(undefined_paths):
-                if (path[0] == common_path[0]):
-                    common_path_idx_0.append(path_idx)
-                    common_path_pos_0.append(0)
-                elif (path[0] == common_path[-1]):
-                    common_path_idx_1.append(path_idx)
-                    common_path_pos_1.append(0)
-                elif (path[-1] == common_path[0]):
-                    common_path_idx_0.append(path_idx)
-                    common_path_pos_0.append(-1)
-                elif (path[-1] == common_path[-1]):
-                    common_path_idx_1.append(path_idx)
-                    common_path_pos_1.append(-1)
-                    
-            if len(common_path_idx_0) == 2:
-                remove_idx = common_path_idx_0
-                path_1 = undefined_paths[common_path_idx_0[0]]
-                path_2 = undefined_paths[common_path_idx_0[1]]
-                touch_point_1 = common_path_pos_0[0]
-                touch_point_2 = common_path_pos_0[1]
-                split_point_1, con_line_idx_1, head_point_1 = find_neighbor_point(path_1, connected_lines, touch_point_1)
-                split_point_2, con_line_idx_2, head_point_2 = find_neighbor_point(path_2, connected_lines,  touch_point_2)
-                left_connected_line = split_paths[idx][0]
-                right_connected_line = split_paths[idx][1]
+    for idx, path in enumerate(undefined_paths):
+        for adjacent_point in expanded_points:
+            if adjacent_point == path[0] or adjacent_point == path[1]:
+                remove_idx.append(idx)
+                pos = None
+                select_line = []
                 
-                shortest_distance_11, point_11 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[left_connected_line])
-                shortest_distance_12, point_12 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[right_connected_line])
-                shortest_distance_21, point_21 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[left_connected_line])
-                shortest_distance_22, point_22 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[right_connected_line])
-                min_distance = min(shortest_distance_11, shortest_distance_12, shortest_distance_21, shortest_distance_22)
-                
-                if (min_distance == shortest_distance_11) or (min_distance == shortest_distance_22):
-                    path_dir_1 = defined_paths[idx][0]
-                    add_point_1 = left_connected_line[point_11]
-                    add_point_2 = right_connected_line[point_22]
-                else:
-                    path_dir_1 = defined_paths[idx][1]
-                    add_point_1 = right_connected_line[point_12]
-                    add_point_2 = left_connected_line[point_21]
-                    
-                if head_point_1 == 0:
-                    new_path_1 = [connected_lines[con_line_idx_1][-1], add_point_1]
-                    connected_lines[con_line_idx_1][0] = add_point_1
-                else:
-                    new_path_1 = [connected_lines[con_line_idx_1][0], add_point_1]
-                    connected_lines[con_line_idx_1][-1] = add_point_1
-                
-                if head_point_2 == 0:
-                    new_path_2 = [connected_lines[con_line_idx_2][-1], add_point_2]
-                    connected_lines[con_line_idx_2][0] = add_point_2
-                else:
-                    new_path_2 = [connected_lines[con_line_idx_2][0], add_point_2]
-                    connected_lines[con_line_idx_2][-1] = add_point_2
-                    
-                if path_dir_1 == 0:  
-                    left_paths.append(new_path_1)
-                    right_paths.append(new_path_2)
-                else:
-                    left_paths.append(new_path_2)
-                    right_paths.append(new_path_1)
-                        
-            if len(common_path_idx_1) == 2:
-                remove_idx = remove_idx + common_path_idx_1
-                path_1 = undefined_paths[common_path_idx_1[0]]
-                path_2 = undefined_paths[common_path_idx_1[1]]
-                touch_point_1 = common_path_pos_1[0]
-                touch_point_2 = common_path_pos_1[1]
-                split_point_1, con_line_idx_1, head_point_1 = find_neighbor_point(path_1, connected_lines, touch_point_1)
-                split_point_2, con_line_idx_2, head_point_2 = find_neighbor_point(path_2, connected_lines,  touch_point_2)
-                left_connected_line = split_paths[idx][0]
-                right_connected_line = split_paths[idx][1]
-                
-                shortest_distance_11, point_11 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[left_connected_line])
-                shortest_distance_12, point_12 = find_shortest_distance(skeleton_points[split_point_1], skeleton_points[right_connected_line])
-                shortest_distance_21, point_21 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[left_connected_line])
-                shortest_distance_22, point_22 = find_shortest_distance(skeleton_points[split_point_2], skeleton_points[right_connected_line])
-                min_distance = min(shortest_distance_11, shortest_distance_12, shortest_distance_21, shortest_distance_22)
-                
-                if (min_distance == shortest_distance_11) or (min_distance == shortest_distance_22):
-                    path_dir_1 = defined_paths[idx][0]
-                    add_point_1 = left_connected_line[point_11]
-                    add_point_2 = right_connected_line[point_22]
-                else:
-                    path_dir_1 = defined_paths[idx][1]
-                    add_point_1 = right_connected_line[point_12]
-                    add_point_2 = left_connected_line[point_21]
-                
-                if head_point_1 == 0:
-                    new_path_1 = [connected_lines[con_line_idx_1][-1], add_point_1]
-                    connected_lines[con_line_idx_1][0] = add_point_1
-                else:
-                    new_path_1 = [connected_lines[con_line_idx_1][0], add_point_1]
-                    connected_lines[con_line_idx_1][-1] = add_point_1
-                
-                if head_point_2 == 0:
-                    new_path_2 = [connected_lines[con_line_idx_2][-1], add_point_2]
-                    connected_lines[con_line_idx_2][0] = add_point_2
-                else:
-                    new_path_2 = [connected_lines[con_line_idx_2][0], add_point_2]
-                    connected_lines[con_line_idx_2][-1] = add_point_2
-                
-                if path_dir_1 == 0:  
-                    left_paths.append(new_path_1)
-                    right_paths.append(new_path_2)
-                else:
-                    left_paths.append(new_path_2)
-                    right_paths.append(new_path_1)
-        
-            for i in sorted(remove_idx, reverse=True):
-                del undefined_paths[i]
-    
-    remove_idx = []   
-    for path_idx, path in enumerate(undefined_paths):
-        for idx, common_path in enumerate(common_paths):
-            split_path = split_paths[idx]
-            path_1 = split_path[0]
-            path_2 = split_path[1]
-            
-            distance_1, distance_2 = None, None
-            path_dir = None
-            touch_point = None
-            new_connect_point = None
-            
-            if path[0] == common_path[0]:
-                touch_point = 0
-                new_connect_point = 0
-                distance_1 = euclidean_distance(skeleton_points[path[0]], skeleton_points[path_1[0]])
-                distance_2 = euclidean_distance(skeleton_points[path[0]], skeleton_points[path_2[0]])
-            elif path[0] == common_path[-1]:
-                touch_point = 0
-                new_connect_point = -1
-                distance_1 = euclidean_distance(skeleton_points[path[0]], skeleton_points[path_1[-1]])
-                distance_2 = euclidean_distance(skeleton_points[path[0]], skeleton_points[path_2[-1]])
-            elif path[-1] == common_path[0]:
-                touch_point = -1
-                new_connect_point = 0
-                distance_1 = euclidean_distance(skeleton_points[path[-1]], skeleton_points[path_1[0]])
-                distance_2 = euclidean_distance(skeleton_points[path[-1]], skeleton_points[path_2[0]])
-            elif path[-1] == common_path[-1]:
-                touch_point = -1
-                new_connect_point = -1
-                distance_1 = euclidean_distance(skeleton_points[path[-1]], skeleton_points[path_1[-1]])
-                distance_2 = euclidean_distance(skeleton_points[path[-1]], skeleton_points[path_2[-1]])
-            
-            if distance_1 is not None and distance_2 is not None:
-                _, con_line_idx, head_point = find_neighbor_point(path, connected_lines, touch_point)
-                
-                if distance_1 < distance_2: 
-                    new_path = [path[swap_values(touch_point)], path_1[new_connect_point]]
-                    path_dir = defined_paths[idx][0]
-                    connected_lines[con_line_idx][swap_values(head_point)] = path_1[new_connect_point]
-                else:
-                    new_path = [path[swap_values(touch_point)], path_2[new_connect_point]]
-                    path_dir = defined_paths[idx][1]
-                    connected_lines[con_line_idx][swap_values(head_point)] = path_2[new_connect_point]
-                
-                if path_dir == 0:
-                    left_paths.append(new_path)
-                else:
-                    right_paths.append(new_path)
-                    
-                remove_idx.append(path_idx)
-                break
-    
-    for i in sorted(remove_idx, reverse=True):
-        del undefined_paths[i]
-        
-    is_found = True
-    
-    while is_found:
-        is_found = False
-        
-        remove_idx = []
-        for idx, path in enumerate(undefined_paths):
-            for left_path in left_paths:
-                if path[0] == left_path[0] or path[0] == left_path[-1] or path[-1] == left_path[-1] or path[-1] == left_path[0]:
-                    left_paths.append(path)
-                    remove_idx.append(idx)
-                    is_found = True
-                    break
-                
-            if is_found == False:
-                for right_path in right_paths:
-                    if path[0] == right_path[0] or path[0] == right_path[-1] or path[-1] == right_path[-1] or path[-1] == right_path[0]:
-                        right_paths.append(path)
-                        remove_idx.append(idx)
-                        is_found = True
+                for line in connected_lines:
+                    if line[0] == path[0] and line[-1] == path[1]:
+                        select_line = line
+                        break
+                    elif line[-1] == path[0] and line[0] == path[1]:
+                        select_line = line[::-1]
                         break
                 
+                if adjacent_point == path[0]:
+                    pos = 0
+                else:
+                    pos = 1
+                
+                original_point = path[pos]
+                path_1 = expanded_points[adjacent_point][0]
+                path_2 = expanded_points[adjacent_point][1]
+                distance_1, nearest_point_1 = distance_point_to_line(original_point, path_1[0], path_1[-1], skeleton_points)
+                distance_2, nearest_point_2 = distance_point_to_line(original_point, path_2[0], path_2[-1], skeleton_points)
+                
+                if distance_1 < distance_2:
+                    if pos == 0:
+                        new_line = [nearest_point_1] + select_line
+                    else:
+                        new_line = select_line + [nearest_point_1]
+                    left_paths.append([new_line[0], new_line[-1]])
+                    
+                else:
+                    if pos == 0:
+                        new_line = [nearest_point_2] + select_line
+                    else:
+                        new_line = select_line + [nearest_point_2]
+                    right_paths.append([new_line[0], new_line[-1]])
+                
+                connected_lines.append(new_line)
+                
+                break
+            
+    for i in sorted(remove_idx, reverse=True):
+        del undefined_paths[i]
+
+    
+    is_found = True
+    while is_found:
+        is_found = False
+        remove_idx = []
+        new_left_paths = []
+        new_right_paths = []
+    
+        for idx, path in enumerate(undefined_paths):
+            info = [{
+                    'left': [],
+                    'right': []
+                },{
+                    'left': [],
+                    'right': []
+                }
+            ]
+            
+            for left_path in left_paths:
+                if path[0] == left_path[0] or path[0] == left_path[1]:
+                    info[0]['left'].append(left_path)
+                if path[1] == left_path[0] or path[1] == left_path[1]:
+                    info[1]['left'].append(left_path)
+                    
+            for right_path in right_paths:
+                if path[0] == right_path[0] or path[0] == right_path[1]:
+                    info[0]['right'].append(right_path)
+                if path[1] == right_path[0] or path[1] == right_path[1]:
+                    info[1]['right'].append(right_path)
+                
+            if (len(info[0]['left']) and len(info[1]['right'])) or (len(info[1]['left']) and len(info[0]['right'])):
+                continue
+            elif not len(info[0]['left']) and not len(info[0]['right']) and not len(info[1]['left']) and not len(info[1]['right']):
+                continue
+            elif not len(info[0]['left']) and not len(info[0]['right']):
+                is_found = True
+                remove_idx.append(idx)
+                
+                if len(info[1]['left']) and not len(info[1]['right']):
+                    new_left_paths.append(path)
+                elif not len(info[1]['left']) and len(info[1]['right']):
+                    new_right_paths.append(path)
+                else:
+                    min_left_distance = 10000
+                    min_right_distance = 10000
+                    
+                    for line in connected_lines:
+                        if line[0] == path[0] and line[-1] == path[-1]:
+                            next_point = line[-2]
+                            break
+                        elif line[-1] == path[0] and line[0] == path[-1]:
+                            next_point = line[1]
+                            break
+                    
+                    print(next_point)
+                    
+                    for left_path in info[1]['left']:
+                        select_line = []
+                        for line in connected_lines:
+                            if line[0] == left_path[0] and line[-1] == left_path[-1]:
+                                if line[0] == path[1]:
+                                    select_line = line[2:]
+                                else:
+                                    select_line = line[:-2]
+                                break
+                            elif line[-1] == left_path[0] and line[0] == left_path[-1]:
+                                if line[0] == path[1]:
+                                    select_line = line[2:]
+                                else:
+                                    select_line = line[:-2]
+                                break
+                            
+                        distance, _ = find_shortest_distance(skeleton_points[next_point], skeleton_points[select_line])
+                        if distance < min_left_distance:
+                            min_left_distance = distance
+                    
+                    for right_path in info[1]['right']:
+                        select_line = []
+                        for line in connected_lines:
+                            if line[0] == right_path[0] and line[-1] == right_path[-1]:
+                                if line[0] == path[1]:
+                                    select_line = line[2:]
+                                else:
+                                    select_line = line[:-2]
+                                break
+                            elif line[-1] == right_path[0] and line[0] == right_path[-1]:
+                                if line[0] == path[1]:
+                                    select_line = line[2:]
+                                else:
+                                    select_line = line[:-2]
+                                break
+                            
+                        distance, _ = find_shortest_distance(skeleton_points[next_point], skeleton_points[select_line])
+                        
+                        print(distance)
+                        if distance < min_right_distance:
+                            min_right_distance = distance
+                    
+                    if min_left_distance < min_right_distance:
+                        new_left_paths.append(path)
+                    else:
+                        new_right_paths.append(path)
+            elif not len(info[1]['left']) and not len(info[1]['right']):
+                is_found = True
+                remove_idx.append(idx)
+                
+                if len(info[0]['left']) and not len(info[0]['right']):
+                    new_left_paths.append(path)
+                elif not len(info[0]['left']) and len(info[0]['right']):
+                    new_right_paths.append(path)
+                else:
+                    for line in connected_lines:
+                        if line[0] == path[0] and line[-1] == path[-1]:
+                            next_point = line[1]
+                            break
+                        elif line[-1] == path[0] and line[0] == path[-1]:
+                            next_point = line[-2]
+                            break
+                    
+                    min_left_distance = 10000
+                    min_right_distance = 10000
+                    
+                    for left_path in info[0]['left']:
+                        select_line = []
+                        for line in connected_lines:
+                            if line[0] == left_path[0] and line[-1] == left_path[-1]:
+                                if line[0] == path[0]:
+                                    select_line = line[2:]
+                                else:
+                                    select_line = line[:-2]
+                                break
+                            elif line[-1] == left_path[0] and line[0] == left_path[-1]:
+                                if line[0] == path[0]:
+                                    select_line = line[2:]
+                                else:
+                                    select_line = line[:-2]
+                                break
+                            
+                        distance, _ = find_shortest_distance(skeleton_points[next_point], skeleton_points[select_line])
+                        if distance < min_left_distance:
+                            min_left_distance = distance
+                    
+                    for right_path in info[0]['right']:
+                        select_line = []
+                        for line in connected_lines:
+                            if line[0] == right_path[0] and line[-1] == right_path[-1]:
+                                if line[0] == path[0]:
+                                    select_line = line[2:]
+                                else:
+                                    select_line = line[:-2]
+                                break
+                            elif line[-1] == right_path[0] and line[0] == right_path[-1]:
+                                if line[0] == path[0]:
+                                    select_line = line[2:]
+                                else:
+                                    select_line = line[:-2]
+                                break
+                            
+                        distance, _ = find_shortest_distance(skeleton_points[next_point], skeleton_points[select_line])
+                        if distance < min_right_distance:
+                            min_right_distance = distance
+                    
+                    if min_left_distance < min_right_distance:
+                        new_left_paths.append(path)
+                    else:
+                        new_right_paths.append(path)   
+        
+        left_paths += new_left_paths
+        right_paths += new_right_paths
         for i in sorted(remove_idx, reverse=True):
             del undefined_paths[i]
-    
         
     return left_paths, right_paths, undefined_paths, connected_lines
-
+                
 # Define a function to find neighbors
 def find_distant_neighbors(data, i, j, k, threshold):
     for di in [-1, 0, 1]:
