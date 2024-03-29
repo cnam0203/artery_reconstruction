@@ -1,5 +1,4 @@
 import nibabel as nib
-import open3d as o3d
 import numpy as np
 
 from skimage.morphology import skeletonize, thin
@@ -8,10 +7,8 @@ from skimage import measure
 from scipy.spatial import KDTree, distance_matrix
 from sklearn.cluster import DBSCAN, KMeans
 
-from PIL import Image
 import matplotlib.pyplot as plt
 
-import cv2
 import math
 import time
 import os
@@ -75,7 +72,7 @@ def reconstruct_surface(segment_image,
                     elif line[-1] == cur_line[0] or line[-1] == cur_line[-1]:
                         connected_points.append(line[-1])
             
-            mid_point = np.mean(skeleton_points[connected_points], axis=0)
+            mid_point = np.mean(skeleton_points[connected_points], axis=0, dtype=np.int64)
             new_index = skeleton_points.shape[0]
             skeleton_points = np.vstack([skeleton_points, mid_point])
             
@@ -107,10 +104,6 @@ def reconstruct_surface(segment_image,
             distance = euclidean_distance(skeleton_points[point_1], skeleton_points[point_2])
             neighbor_distances[point_1][point_2] = distance
             neighbor_distances[point_2][point_1] = distance
-        #     sum_distance += distance
-        
-        # reduced_distances[head_point_1][head_point_2] = sum_distance
-        # reduced_distances[head_point_2][head_point_1] = sum_distance
     
     junction_points = refine_junction_points(skeleton_points, neighbor_distances) 
     
@@ -200,58 +193,7 @@ def reconstruct_surface(segment_image,
     
     left_paths = []
     right_paths = []  
-    # for key, value in connected_points.items():
-    #     if len(value) > 3:
-    #         max_value = 0
-    #         max_axis = 0
-            
-    #         for idx in value:
-    #             line = connected_lines[idx]
-    #             point_1 = line[0]
-    #             point_2 = line[-1]
-                
-    #             if point_2 == key:
-    #                 point_2 = point_1
-    #                 point_1 = key
-                
-    #             vector = skeleton_points[point_1] - skeleton_points[point_2]
-    #             axis_value = np.max(np.abs(vector))
-    #             axis = np.argmax(np.abs(vector))
-                
-    #             if axis_value > max_value:
-    #                 max_value = axis_value
-    #                 max_axis = axis
-            
-    #         print(skeleton_points[key], max_value, max_axis)
-    #         list_value = []
-             
-    #         for idx in value:
-    #             line = connected_lines[idx]
-    #             point_1 = line[0]
-    #             point_2 = line[-1]
-                
-    #             if point_2 == key:
-    #                 point_2 = point_1
-    #                 point_1 = key
-                
-    #             vector = skeleton_points[point_1] - skeleton_points[point_2]
-                
-    #             axis_value = vector[max_axis]
-                
-    #             if max_axis == 0:
-    #                 axis_value = abs(axis_value)
-                    
-    #             list_value.append(axis_value)
-            
-    #         # Convert the list to a NumPy array for easier computation
-    #         values_array = np.array(list_value)
-    #         percentile_50 = np.percentile(values_array, 50)
-            
-    #         first_half = [[idx, axis_value] for idx, axis_value in enumerate(list_value) if axis_value < percentile_50]
-    #         second_half = [[idx, axis_value] for idx, axis_value in enumerate(list_value) if axis_value >= percentile_50]
-            
-    #         left_paths += [value[pos[0]] for pos in first_half]
-    #         right_paths += [value[pos[0]] for pos in second_half]
+
     
     if 5 in index or 6 in index:
         endpoint_pos = skeleton_points[end_points]
@@ -267,18 +209,12 @@ def reconstruct_surface(segment_image,
         directions = ['left', 'right']
         endpoint_vector = skeleton_points[aca_endpoints[0]] - skeleton_points[aca_endpoints[1]]
         common_paths, left_paths, right_paths, undefined_paths = find_branches(aca_endpoints, end_points, directions, skeleton_points, junction_points, edges, connected_lines, connected_points)
-        
-    for idx, connected_line in enumerate(connected_lines):
-        color = 'black'
-        
-        if idx in left_paths:
-            color = 'green'
-        elif idx in right_paths:
-            color = 'blue'
-            
-        line_traces.append(generate_lines(skeleton_points[connected_line], 4, color))
-    
-    line_groups = [common_paths, left_paths, right_paths, undefined_paths, ]
+        skeleton_points, split_groups = find_split_points(common_paths, original_data, mask_data, cex_data, skeleton_points, connected_lines)
+        common_paths, undefined_paths, split_groups = correct_undefined_paths(common_paths, undefined_paths, split_groups)
+        split_paths, undefined_paths, connected_lines = connect_split_points(split_groups, skeleton_points, undefined_paths, connected_lines)
+        common_paths, left_paths, right_paths, connected_lines, defined_paths = connect_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths) 
+
+    line_groups = [common_paths, left_paths, right_paths, undefined_paths]
     line_colors = ['red', 'blue', 'green', 'orange', ]
     for i, line_group in enumerate(line_groups):
         for line in line_group:
@@ -294,8 +230,8 @@ def reconstruct_surface(segment_image,
         
     show_figure([
                 visualized_skeleton_points, 
-                visualized_end_points, 
-                visualized_junction_points,
+                # visualized_end_points, 
+                # visualized_junction_points,
                 # visualized_artery_points,
             ] 
                 + line_traces
@@ -309,35 +245,34 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # Specify the path to your NIfTI file
-    # segment_file_path =  '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub61_harvard_watershed.nii.gz'
-    # original_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-61_acq-tof_angio_resampled.nii.gz'
-    
-    # 8-15
-    segment_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/TOF_multiclass_segmentation.nii.gz'
-    original_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-1_run-1_mra_TOF.nii.gz'
-    
-    # segment_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-4947_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-4947_run-1_mra_TOF.nii.gz'
-    
-    # segment_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-2983_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-2983_run-1_mra_TOF.nii.gz'
+    # segment_file_path =  'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub61_harvard_watershed.nii.gz'
+    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-61_acq-tof_angio_resampled.nii.gz'
     
     # 5-15
-    # segment_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-11_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-11_run-1_mra_TOF.nii.gz'
+    segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/TOF_multiclass_segmentation.nii.gz'
+    original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-1057_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-1057_run-1_mra_TOF.nii.gz'
+    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-4947_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-4947_run-1_mra_TOF.nii.gz'
+    
+    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2983_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2983_run-1_mra_TOF.nii.gz'
+    
+    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-11_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-11_run-1_mra_TOF.nii.gz'
+    
+    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1057_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1057_run-1_mra_TOF.nii.gz'
     
     # 10-20
-    # segment_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-2049_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-2049_run-1_mra_TOF.nii.gz'
+    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2049_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2049_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-1425_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-1425_run-1_mra_TOF.nii.gz'
+    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1425_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-1425_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-2849_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/sub-2849_run-1_mra_TOF.nii.gz'
+    # segment_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2849_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub-2849_run-1_mra_TOF.nii.gz'
     
     # Load the NIfTI image
     segment_image = nib.load(segment_file_path)
@@ -347,7 +282,7 @@ if __name__ == "__main__":
     gaussian_sigma=2
     distance_threshold=20
     laplacian_iter = 5
-    neighbor_threshold_1 = 8
+    neighbor_threshold_1 = 5
     neighbor_threshold_2 = 15
  
     #Find skeleton

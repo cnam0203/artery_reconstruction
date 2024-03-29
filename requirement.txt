@@ -1,0 +1,9 @@
+nibabel
+scikit-image
+numpy
+plotly
+scipy
+scikit-learn
+matplotlib
+trimesh
+skan
