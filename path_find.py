@@ -218,7 +218,8 @@ def reconstruct_surface(segment_image,
         skeleton_points, connected_lines = reinterpolate_connected_lines(skeleton_points, connected_lines)
         left_points, right_points = extract_point_position(skeleton_points, connected_lines, left_paths, right_paths)
         touch_points, artery_data = find_touchpoints(mask_data, left_points, right_points, 1)
-        visualize_artery_mesh(artery_data, voxel_sizes, [1, 2], folder_path)
+        visualize_artery_mesh(artery_data, voxel_sizes, [1, 2], folder_path + '_split')
+        visualize_artery_mesh(mask_data, voxel_sizes, [1], folder_path + '_orginal')
         
     line_groups = [common_paths, left_paths, right_paths, undefined_paths]
     line_colors = ['red', 'blue', 'green', 'orange', ]
@@ -236,9 +237,9 @@ def reconstruct_surface(segment_image,
         
     show_figure([
                 visualized_skeleton_points, 
-                # visualized_end_points, 
-                # visualized_junction_points,
-                # visualized_artery_points,
+                visualized_end_points, 
+                visualized_junction_points,
+                visualized_artery_points,
             ] 
                 + line_traces
     )
@@ -250,10 +251,8 @@ if __name__ == "__main__":
     # Calculate runtime - record start time
     start_time = time.time()
     dataset_dir = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/'
-
+    
     # Specify the path to your NIfTI file
-    # segment_file_path =  'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/sub61_harvard_watershed.nii.gz'
-    # original_file_path = dataset_dir + 'sub-61_acq-tof_angio_resampled.nii.gz'
     
     # 5-15
     # segment_file_path = dataset_dir + 'TOF_multiclass_segmentation.nii.gz'
@@ -278,11 +277,11 @@ if __name__ == "__main__":
     # segment_file_path = dataset_dir + 'sub-2049_TOF_multiclass_segmentation.nii.gz'
     # original_file_path = dataset_dir + 'sub-2049_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = dataset_dir + 'sub-1425_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = dataset_dir + 'sub-1425_run-1_mra_TOF.nii.gz'
+    segment_file_path = dataset_dir + 'sub-1425_TOF_multiclass_segmentation.nii.gz'
+    original_file_path = dataset_dir + 'sub-1425_run-1_mra_TOF.nii.gz'
     
     
-    
+    folder_path = '/Users/apple/Desktop/neuroscience/artery_separate/mesh/' + segment_file_path.split('/')[-1].split('.')[-3]
     # Load the NIfTI image
     segment_image = nib.load(segment_file_path)
     original_image = nib.load(original_file_path)
@@ -291,8 +290,8 @@ if __name__ == "__main__":
     gaussian_sigma=2
     distance_threshold=20
     laplacian_iter = 5
-    neighbor_threshold_1 = 5
-    neighbor_threshold_2 = 15
+    neighbor_threshold_1 = 10
+    neighbor_threshold_2 = 20
  
     #Find skeleton
     reconstruct_surface(
@@ -304,7 +303,7 @@ if __name__ == "__main__":
                     gaussian_sigma=gaussian_sigma, 
                     distance_threshold=distance_threshold,
                     laplacian_iter=laplacian_iter,
-                    folder_path='',
+                    folder_path=folder_path,
                     neighbor_threshold_1=neighbor_threshold_1,
                     neighbor_threshold_2=neighbor_threshold_2
                 )

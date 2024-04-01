@@ -31,6 +31,6 @@ def visualize_artery_mesh(segment_data, voxel_sizes, index, path, all=False):
 
             scene.add_geometry(mesh)
     
-    scene.export('output_mesh_gap.stl')
+    scene.export(path + '_mesh.stl')
     
     

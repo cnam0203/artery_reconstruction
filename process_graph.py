@@ -1914,8 +1914,8 @@ def swap_values(x):
         
 #     return left_paths, right_paths, undefined_paths, connected_lines
 
-def distance_point_to_line(idx_1, idx_2, idx_3, skeleton_points):
-    p1 = skeleton_points[idx_1]
+def distance_point_to_line(p1, idx_2, idx_3, skeleton_points):
+    # p1 = skeleton_points[idx_1]
     p2 = skeleton_points[idx_2]
     p3 = skeleton_points[idx_3]
     
@@ -1960,7 +1960,12 @@ def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_pa
                 else:
                     pos = 1
                 
-                original_point = path[pos]
+                
+                if pos == 0:
+                    original_point = (skeleton_points[select_line[0]] + skeleton_points[select_line[1]])/2
+                else:
+                    original_point = (skeleton_points[select_line[-2]] + skeleton_points[select_line[-1]])/2
+                    
                 path_1 = expanded_points[adjacent_point][0]
                 path_2 = expanded_points[adjacent_point][1]
                 distance_1, nearest_point_1 = distance_point_to_line(original_point, path_1[0], path_1[-1], skeleton_points)
@@ -2040,9 +2045,7 @@ def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_pa
                         elif line[-1] == path[0] and line[0] == path[-1]:
                             next_point = line[1]
                             break
-                    
-                    print(next_point)
-                    
+                                        
                     for left_path in info[1]['left']:
                         select_line = []
                         for line in connected_lines:
@@ -2081,7 +2084,6 @@ def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_pa
                             
                         distance, _ = find_shortest_distance(skeleton_points[next_point], skeleton_points[select_line])
                         
-                        print(distance)
                         if distance < min_right_distance:
                             min_right_distance = distance
                     
