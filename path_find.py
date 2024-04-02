@@ -47,6 +47,7 @@ def reconstruct_surface(segment_image,
     skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
     
     max_length = 2
+    reserved_points = {}
     
     while max_length <= 5:
         short_idx = []
@@ -78,10 +79,30 @@ def reconstruct_surface(segment_image,
             
             for sub_idx, line in enumerate(connected_lines):
                 if (sub_idx != idx) and sub_idx not in reduced_idx:
+                    point_1 = line[0]
+                    point_2 = line[-1]
+                    
                     if line[0] == cur_line[0] or line[0] == cur_line[-1]:
                         connected_lines[sub_idx][0] = new_index
+                        
+                        if new_index not in reserved_points:
+                            reserved_points[new_index] = {}
+                        
+                        if point_1 in reserved_points and point_2 in reserved_points[point_1]:
+                            reserved_points[new_index][point_2] = reserved_points[point_1][point_2]
+                        else:
+                            reserved_points[new_index][point_2] = point_1
+                            
                     elif line[-1] == cur_line[0] or line[-1] == cur_line[-1]:
                         connected_lines[sub_idx][-1] = new_index
+                        
+                        if new_index not in reserved_points:
+                            reserved_points[new_index] = {}
+                        
+                        if point_2 in reserved_points and point_1 in reserved_points[point_2]:
+                            reserved_points[new_index][point_1] = reserved_points[point_2][point_1]
+                        else:
+                            reserved_points[new_index][point_1] = point_2
             
         for i in sorted(short_idx, reverse=True):
             del connected_lines[i]
@@ -193,7 +214,7 @@ def reconstruct_surface(segment_image,
     
     left_paths = []
     right_paths = []  
-
+    print(reserved_points)
     
     if 5 in index or 6 in index:
         endpoint_pos = skeleton_points[end_points]
@@ -213,7 +234,7 @@ def reconstruct_surface(segment_image,
         common_paths, undefined_paths, split_groups = correct_undefined_paths(common_paths, undefined_paths, split_groups)
         split_paths, undefined_paths, connected_lines = connect_split_points(split_groups, skeleton_points, undefined_paths, connected_lines)
         common_paths, left_paths, right_paths, connected_lines, defined_paths, expanded_points = connect_common_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths) 
-        left_paths, right_paths, undefined_paths, connected_lines = connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points, expanded_points)
+        left_paths, right_paths, undefined_paths, connected_lines = connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points, expanded_points, reserved_points)
         common_paths, left_paths, right_paths, connected_lines, defined_paths, expanded_points = connect_common_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths) 
         skeleton_points, connected_lines = reinterpolate_connected_lines(skeleton_points, connected_lines)
         left_points, right_points = extract_point_position(skeleton_points, connected_lines, left_paths, right_paths)
@@ -239,7 +260,7 @@ def reconstruct_surface(segment_image,
                 visualized_skeleton_points, 
                 visualized_end_points, 
                 visualized_junction_points,
-                visualized_artery_points,
+                # visualized_artery_points,
             ] 
                 + line_traces
     )
@@ -258,8 +279,8 @@ if __name__ == "__main__":
     # segment_file_path = dataset_dir + 'TOF_multiclass_segmentation.nii.gz'
     # original_file_path = dataset_dir + 'sub-1_run-1_mra_TOF.nii.gz'
     
-    # segment_file_path = dataset_dir + 'sub-4947_TOF_multiclass_segmentation.nii.gz'
-    # original_file_path = dataset_dir + 'sub-4947_run-1_mra_TOF.nii.gz'
+    segment_file_path = dataset_dir + 'sub-4947_TOF_multiclass_segmentation.nii.gz'
+    original_file_path = dataset_dir + 'sub-4947_run-1_mra_TOF.nii.gz'
     
     # segment_file_path = dataset_dir + 'sub-2983_TOF_multiclass_segmentation.nii.gz'
     # original_file_path = dataset_dir + 'sub-2983_run-1_mra_TOF.nii.gz'
@@ -277,8 +298,8 @@ if __name__ == "__main__":
     # segment_file_path = dataset_dir + 'sub-2049_TOF_multiclass_segmentation.nii.gz'
     # original_file_path = dataset_dir + 'sub-2049_run-1_mra_TOF.nii.gz'
     
-    segment_file_path = dataset_dir + 'sub-1425_TOF_multiclass_segmentation.nii.gz'
-    original_file_path = dataset_dir + 'sub-1425_run-1_mra_TOF.nii.gz'
+    # segment_file_path = dataset_dir + 'sub-1425_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-1425_run-1_mra_TOF.nii.gz'
     
     
     folder_path = '/Users/apple/Desktop/neuroscience/artery_separate/mesh/' + segment_file_path.split('/')[-1].split('.')[-3]
@@ -290,14 +311,14 @@ if __name__ == "__main__":
     gaussian_sigma=2
     distance_threshold=20
     laplacian_iter = 5
-    neighbor_threshold_1 = 10
-    neighbor_threshold_2 = 20
+    neighbor_threshold_1 = 5
+    neighbor_threshold_2 = neighbor_threshold_1 + 10
  
     #Find skeleton
     reconstruct_surface(
                     segment_image, 
                     original_image, 
-                    index=[5, 6, 4], 
+                    index=[5, 6], 
                     intensity_threshold_1=intensity_threshold_1, 
                     intensity_threshold_2=intensity_threshold_2, 
                     gaussian_sigma=gaussian_sigma, 

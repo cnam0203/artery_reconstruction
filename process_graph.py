@@ -1937,7 +1937,7 @@ def distance_point_to_line(p1, idx_2, idx_3, skeleton_points):
 
     return distance, nearest_point
 
-def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points, expanded_points):
+def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_paths, undefined_paths, common_paths, split_paths, skeleton_points, expanded_points, reserved_points):
     remove_idx = []
     
     for idx, path in enumerate(undefined_paths):
@@ -1960,16 +1960,23 @@ def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_pa
                 else:
                     pos = 1
                 
-                
-                if pos == 0:
-                    original_point = (skeleton_points[select_line[0]] + skeleton_points[select_line[1]])/2
+                if path[pos] in reserved_points and path[pos-1] in reserved_points[path[pos]]:
+                    if pos == 0:
+                        original_point = (skeleton_points[reserved_points[path[pos]][path[pos-1]]] + skeleton_points[select_line[1]])/2
+                    else:
+                        original_point = (skeleton_points[reserved_points[path[pos]][path[pos-1]]] + skeleton_points[select_line[-1]])/2
                 else:
-                    original_point = (skeleton_points[select_line[-2]] + skeleton_points[select_line[-1]])/2
+                    if pos == 0:
+                        original_point = (skeleton_points[select_line[0]] + skeleton_points[select_line[1]])/2
+                    else:
+                        original_point = (skeleton_points[select_line[-2]] + skeleton_points[select_line[-1]])/2
                     
                 path_1 = expanded_points[adjacent_point][0]
                 path_2 = expanded_points[adjacent_point][1]
                 distance_1, nearest_point_1 = distance_point_to_line(original_point, path_1[0], path_1[-1], skeleton_points)
                 distance_2, nearest_point_2 = distance_point_to_line(original_point, path_2[0], path_2[-1], skeleton_points)
+                
+                print(original_point, distance_1, distance_2, skeleton_points[nearest_point_1], skeleton_points[nearest_point_2])
                 
                 if distance_1 < distance_2:
                     if pos == 0:
