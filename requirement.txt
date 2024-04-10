@@ -7,3 +7,5 @@ scikit-learn
 matplotlib
 trimesh
 skan
+open3d
+skeletor
