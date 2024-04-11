@@ -6,25 +6,16 @@ import plotly.graph_objs as go
 from scipy.ndimage import convolve
 from skimage.draw import line_nd
 import skan
+from scipy.spatial import KDTree, distance_matrix
 
 def find_graphs(skeleton):
-    skeleton_points = np.argwhere(skeleton != 0)
+    # skeleton_points = np.argwhere(skeleton != 0)
     skeleton_skan = skan.Skeleton(skeleton)
-    all_paths = [
-        skeleton_skan.path_coordinates(i)
-        for i in range(skeleton_skan.n_paths)
-        ]
-    
-    connected_lines = []
-    skeleton_point_indices = {(x, y, z): idx for idx, (x, y, z) in enumerate(skeleton_points)}
+    skeleton_points = skeleton_skan.coordinates
 
-    for path in all_paths:
-        new_line = []
-        for point in path:
-            idx = skeleton_point_indices.get(tuple(point), None)
-            if idx is not None:
-                new_line.append(idx)
-        connected_lines.append(new_line)
+    connected_lines = []
+    for i in range(skeleton_skan.n_paths):
+        connected_lines.append(skeleton_skan.path(i).tolist())
     
     count_points = {}
     end_points = []
