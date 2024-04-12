@@ -90,8 +90,12 @@ def find_projection_point(p1, p2, p3):
     return projection
 
 def find_midpoint_perpendicular_3d(p1, p2, p3):
-    projection = find_projection_point(p1, p3, p2)
-    midpoint = (np.array(p2) + projection) / 2
+    # projection = find_projection_point(p1, p3, p2)
+    # midpoint = (np.array(p2) + projection) / 2
+
+    midpoint_1 = (p2 + p1) / 2
+    midpoint_2 = (p2 + p3) / 2
+    midpoint = (midpoint_1 + midpoint_2) / 2
     return midpoint
 
 def interpolate_points(p1, p2, num_points):
@@ -104,11 +108,29 @@ def interpolate_points(p1, p2, num_points):
     return interpolated_points
 
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
-segment_file_path = dataset_dir + 'sub-4947_TOF_multiclass_segmentation.nii.gz'
-original_file_path = dataset_dir + 'sub-4947_run-1_mra_TOF.nii.gz'
+# segment_file_path = dataset_dir + 'sub-4947_TOF_multiclass_segmentation.nii.gz'
+# original_file_path = dataset_dir + 'sub-4947_run-1_mra_TOF.nii.gz'
 
-# segment_file_path = dataset_dir + 'sub-2983_TOF_multiclass_segmentation.nii.gz'
-# original_file_path = dataset_dir + 'sub-2983_run-1_mra_TOF.nii.gz'
+segment_file_path = dataset_dir + 'sub-2983_TOF_multiclass_segmentation.nii.gz'
+original_file_path = dataset_dir + 'sub-2983_run-1_mra_TOF.nii.gz'
+
+# segment_file_path = dataset_dir + 'sub-11_TOF_multiclass_segmentation.nii.gz'
+# original_file_path = dataset_dir + 'sub-11_run-1_mra_TOF.nii.gz'
+
+# segment_file_path = dataset_dir + 'sub-1057_TOF_multiclass_segmentation.nii.gz'
+# original_file_path = dataset_dir + 'sub-1057_run-1_mra_TOF.nii.gz'
+
+# segment_file_path = dataset_dir + 'sub-2849_TOF_multiclass_segmentation.nii.gz'
+# original_file_path = dataset_dir + 'sub-2849_run-1_mra_TOF.nii.gz'
+
+# segment_file_path = dataset_dir + 'sub-2049_TOF_multiclass_segmentation.nii.gz'
+# original_file_path = dataset_dir + 'sub-2049_run-1_mra_TOF.nii.gz'
+
+# segment_file_path = dataset_dir + 'sub-1425_TOF_multiclass_segmentation.nii.gz'
+# original_file_path = dataset_dir + 'sub-1425_run-1_mra_TOF.nii.gz'
+
+# segment_file_path = dataset_dir + 'TOF_multiclass_segmentation.nii.gz'
+# original_file_path = dataset_dir + 'sub-1_run-1_mra_TOF.nii.gz'
 
 segment_image = nib.load(segment_file_path)
 original_image = nib.load(original_file_path)
@@ -189,12 +211,15 @@ while True:
 vmtk_vertices = np.array(vmtk_vertices)
 vmtk_faces = np.array(vmtk_faces)
 # mesh_copy = tm.load_mesh("C:/Users/nguc4116/Desktop/output_mesh_smooth.stl", enable_post_processing=True, solid=True) 
+
+mesh_bound = tm.Trimesh(vertices=vertices, faces=faces, enable_post_processing=True, solid=True)
 mesh_copy = tm.Trimesh(vertices=vmtk_vertices, faces=vmtk_faces, enable_post_processing=True, solid=True)
-mesh_sub = sk.pre.contract(mesh_copy, epsilon=0.1)
+mesh_sub = sk.pre.contract(mesh_copy, epsilon=0.07)
 mesh_sub = sk.pre.fix_mesh(mesh_sub, remove_disconnected=5, inplace=False)
 
 skeleton_points_1 = skeleton_points_1
 skeleton_points_2 = mesh_sub.vertices
+
 
 skeleton_3 = sk.skeletonize.by_wavefront(mesh_sub, waves=1)
 skeleton_3 = sk.post.clean_up(skeleton_3)
@@ -246,16 +271,18 @@ near_end_points_2 = end_points[indices]
 
 for line in connected_lines:
     for idx, end_idx in enumerate(endpoint_idx):
-        if end_idx == line[0]:
-            new_idx = skeleton_points_1.shape[0]
-            skeleton_points_1 = np.vstack([skeleton_points_1, near_end_points_2[idx]])
-            line.insert(0, new_idx)
-            break
-        elif end_idx == line[-1]:
-            new_idx = skeleton_points_1.shape[0]
-            skeleton_points_1 = np.vstack([skeleton_points_1, near_end_points_2[idx]])
-            line.append(new_idx)
-            break
+        mid_point = (near_end_points_2[idx] + skeleton_points_1[end_idx]) / 2
+        if mesh_bound.contains(np.array([near_end_points_2[idx]]))[0] == True and mesh_bound.contains(np.array([mid_point]))[0] == True:
+            if end_idx == line[0]:
+                new_idx = skeleton_points_1.shape[0]
+                skeleton_points_1 = np.vstack([skeleton_points_1, near_end_points_2[idx]])
+                line.insert(0, new_idx)
+                break
+            elif end_idx == line[-1]:
+                new_idx = skeleton_points_1.shape[0]
+                skeleton_points_1 = np.vstack([skeleton_points_1, near_end_points_2[idx]])
+                line.append(new_idx)
+                break
 
 for line in connected_lines:
     for i in range(len(line) - 2):
@@ -268,12 +295,28 @@ for line in connected_lines:
             skeleton_points_1[line[i+1]] = new_mid_point
 
 loop_count = 0
+outside_idx = []
+inside_idx = []
+
 while loop_count < 20:
     loop_count += 1
     tree = KDTree(skeleton_points_2)
 
     distances, indices = tree.query(skeleton_points_1, k=1)
-    skeleton_points_1 = skeleton_points_2[indices]
+    new_skeleton_points_1 = skeleton_points_2[indices]
+
+    for index, point in enumerate(skeleton_points_1):
+        if indices[index] in inside_idx:
+            skeleton_points_1[index] = new_skeleton_points_1[index]
+        else:
+            if indices[index] not in outside_idx:
+                is_bound = mesh_bound.contains([new_skeleton_points_1[index]])[0]
+
+                if is_bound:
+                    skeleton_points_1[index] = new_skeleton_points_1[index]
+                    inside_idx.append(indices[index])
+                else:
+                    outside_idx.append(indices[index])
 
     for line in connected_lines:
         for i in range(len(line) - 2):
@@ -310,27 +353,24 @@ while loop_count < 20:
 
     connected_lines = new_connected_lines
 
-tree = KDTree(skeleton_points_1)
-distances, indices = tree.query(vertices, k=1)
-
-# line_traces = []
-# # visualized_skeleton_points = generate_points(mesh_sub.vertices, 1, 'red')
+line_traces = []
+visualized_skeleton_points = generate_points(skeleton_points_2, 1, 'red')
 # visualized_skeleton_points_1 = generate_points(old_skeleton_points_1, 3, 'black')
-# visualized_thin_points = generate_points(skeleton_points_1, 3, 'green')
-# visualized_boundary_points = generate_points(vertices, 1, 'blue')
+visualized_thin_points = generate_points(skeleton_points_1, 3, 'green')
+visualized_boundary_points = generate_points(vertices, 1, 'blue')
 
-# for line in connected_lines:
-#     for i in range(len(line) - 1):
-#         line_traces.append(generate_lines(np.array([skeleton_points_1[line[i]], skeleton_points_1[line[i+1]]]), 2, 'green'))
+for line in connected_lines:
+    for i in range(len(line) - 1):
+        line_traces.append(generate_lines(np.array([skeleton_points_1[line[i]], skeleton_points_1[line[i+1]]]), 2, 'green'))
 
-# show_figure([
-#             visualized_boundary_points, 
-#             # visualized_skeleton_points, 
-#             # visualized_thin_points,
-#             # visualized_skeleton_points_1,
-#         ] 
-#             + line_traces
-# )
+show_figure([
+            visualized_boundary_points, 
+            visualized_skeleton_points, 
+            visualized_thin_points,
+            # visualized_skeleton_points_1,
+        ] 
+            # + line_traces
+)
 
 # Calculate colors based on values using the "plasma" colormap
 # Define the trace for the mesh
@@ -354,7 +394,7 @@ surface_data.SetPolys(polygons)
 mySmoother = vmtkscripts.vmtkSurfaceSmoothing()
 mySmoother.Surface = surface_data
 mySmoother.PassBand = 0.1
-mySmoother.NumberOfIterations = 5
+mySmoother.NumberOfIterations = 20
 mySmoother.Execute()
 smoothed_surface = mySmoother.Surface
 
@@ -376,6 +416,9 @@ while True:
     face = [cell.GetId(j) for j in range(cell.GetNumberOfIds())]
     faces.append(face)
 
+vertices = np.array(vertices)
+faces = np.array(faces)
+
 tree = KDTree(skeleton_points_1)
 distances, indices = tree.query(vertices, k=1)
 
@@ -386,9 +429,9 @@ mesh = go.Mesh3d(
     i=faces[:, 0],
     j=faces[:, 1],
     k=faces[:, 2],
-    intensity=-1*distances,
+    intensity=distances,
     colorscale='plasma',
-    colorbar=dict(title='Thickness (mm)', tickvals=[np.min(distances), np.max(distances)]),
+    colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
 )
 
 # Create the figure
