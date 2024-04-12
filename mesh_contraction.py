@@ -24,6 +24,7 @@ from process_graph import *
 from visualize_graph import *
 from slice_selection import *
 from visualize_mesh import *
+from marcube import *
 
 import plotly.graph_objs as go
 from skimage import morphology
@@ -111,14 +112,14 @@ dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
 # segment_file_path = dataset_dir + 'sub-4947_TOF_multiclass_segmentation.nii.gz'
 # original_file_path = dataset_dir + 'sub-4947_run-1_mra_TOF.nii.gz'
 
-segment_file_path = dataset_dir + 'sub-2983_TOF_multiclass_segmentation.nii.gz'
-original_file_path = dataset_dir + 'sub-2983_run-1_mra_TOF.nii.gz'
+# segment_file_path = dataset_dir + 'sub-2983_TOF_multiclass_segmentation.nii.gz'
+# original_file_path = dataset_dir + 'sub-2983_run-1_mra_TOF.nii.gz'
 
 # segment_file_path = dataset_dir + 'sub-11_TOF_multiclass_segmentation.nii.gz'
 # original_file_path = dataset_dir + 'sub-11_run-1_mra_TOF.nii.gz'
 
-# segment_file_path = dataset_dir + 'sub-1057_TOF_multiclass_segmentation.nii.gz'
-# original_file_path = dataset_dir + 'sub-1057_run-1_mra_TOF.nii.gz'
+segment_file_path = dataset_dir + 'sub-1057_TOF_multiclass_segmentation.nii.gz'
+original_file_path = dataset_dir + 'sub-1057_run-1_mra_TOF.nii.gz'
 
 # segment_file_path = dataset_dir + 'sub-2849_TOF_multiclass_segmentation.nii.gz'
 # original_file_path = dataset_dir + 'sub-2849_run-1_mra_TOF.nii.gz'
@@ -144,283 +145,294 @@ neighbor_threshold_1 = 5
 neighbor_threshold_2 = neighbor_threshold_1 + 10
 resolution = 0.05
 
+segment_data = segment_image.get_fdata()
+voxel_sizes = segment_image.header.get_zooms()
+
+vertices,faces= getContourSegments(0.5, segment_data)
+faces = faces[:, 1:]
+vertices = vertices*voxel_sizes
+# print(vertices.shape, faces.shape)
+
+# vertices, faces, normals, values = measure.marching_cubes(segment_data, level=0.5, spacing=voxel_sizes)
+# print(vertices.shape, faces.shape)
 #Find skeleton
-cex_data, voxel_sizes, vertices, faces = reconstruct_surface(
-                segment_image, 
-                original_image, 
-                index=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 
-                intensity_threshold_1=intensity_threshold_1, 
-                intensity_threshold_2=intensity_threshold_2, 
-                gaussian_sigma=gaussian_sigma, 
-                distance_threshold=distance_threshold,
-                laplacian_iter=laplacian_iter,
-                folder_path='',
-                neighbor_threshold_1=neighbor_threshold_1,
-                neighbor_threshold_2=neighbor_threshold_2
-            )
-skeleton = skeletonize(cex_data)
-skeleton_points_1, end_points, junction_points, connected_lines = find_graphs(skeleton)
+# cex_data, voxel_sizes, vertices, faces = reconstruct_surface(
+#                 segment_image, 
+#                 original_image, 
+#                 index=[14, 16], 
+#                 # index=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18], 
+#                 intensity_threshold_1=intensity_threshold_1, 
+#                 intensity_threshold_2=intensity_threshold_2, 
+#                 gaussian_sigma=gaussian_sigma, 
+#                 distance_threshold=distance_threshold,
+#                 laplacian_iter=laplacian_iter,
+#                 folder_path='',
+#                 neighbor_threshold_1=neighbor_threshold_1,
+#                 neighbor_threshold_2=neighbor_threshold_2
+#             )
+# skeleton = skeletonize(cex_data)
+# skeleton_points_1, end_points, junction_points, connected_lines = find_graphs(skeleton)
 
-skeleton_points_1 = voxel_sizes*(skeleton_points_1 + 0.5)
-old_skeleton_points_1 = np.copy(skeleton_points_1)
-old_connected_lines = copy.deepcopy(connected_lines)
+# skeleton_points_1 = voxel_sizes*(skeleton_points_1 + 0.5)
+# old_skeleton_points_1 = np.copy(skeleton_points_1)
+# old_connected_lines = copy.deepcopy(connected_lines)
 
-# Smoother:
-# Create a VTK PolyData object representing the surface
-surface_data = vtk.vtkPolyData()
-points = vtk.vtkPoints()
-for vertex in vertices:
-    points.InsertNextPoint(vertex)
-surface_data.SetPoints(points)
+# # Smoother:
+# # Create a VTK PolyData object representing the surface
+# surface_data = vtk.vtkPolyData()
+# points = vtk.vtkPoints()
+# for vertex in vertices:
+#     points.InsertNextPoint(vertex)
+# surface_data.SetPoints(points)
 
-# Add polygons to the surface
-polygons = vtk.vtkCellArray()
-for face in faces:
-    polygon = vtk.vtkPolygon()
-    for index in face:
-        polygon.GetPointIds().InsertNextId(index)
-    polygons.InsertNextCell(polygon)
-surface_data.SetPolys(polygons)
+# # Add polygons to the surface
+# polygons = vtk.vtkCellArray()
+# for face in faces:
+#     polygon = vtk.vtkPolygon()
+#     for index in face:
+#         polygon.GetPointIds().InsertNextId(index)
+#     polygons.InsertNextCell(polygon)
+# surface_data.SetPolys(polygons)
 
-mySmoother = vmtkscripts.vmtkSurfaceSmoothing()
-mySmoother.Surface = surface_data
-mySmoother.PassBand = 0.1
-mySmoother.NumberOfIterations = 500
-mySmoother.Execute()
-smoothed_surface = mySmoother.Surface
+# mySmoother = vmtkscripts.vmtkSurfaceSmoothing()
+# mySmoother.Surface = surface_data
+# mySmoother.PassBand = 0.1
+# mySmoother.NumberOfIterations = 750
+# mySmoother.Execute()
+# smoothed_surface = mySmoother.Surface
 
-# Get vertices and faces from the surface
-vmtk_vertices = []
-vmtk_faces = []
+# # Get vertices and faces from the surface
+# vmtk_vertices = []
+# vmtk_faces = []
 
-points = smoothed_surface.GetPoints()
-for i in range(points.GetNumberOfPoints()):
-    point = points.GetPoint(i)
-    vmtk_vertices.append(point)
+# points = smoothed_surface.GetPoints()
+# for i in range(points.GetNumberOfPoints()):
+#     point = points.GetPoint(i)
+#     vmtk_vertices.append(point)
 
-cells = smoothed_surface.GetPolys()
-cells.InitTraversal()
-while True:
-    cell = vtk.vtkIdList()
-    if cells.GetNextCell(cell) == 0:
-        break
-    face = [cell.GetId(j) for j in range(cell.GetNumberOfIds())]
-    vmtk_faces.append(face)
+# cells = smoothed_surface.GetPolys()
+# cells.InitTraversal()
+# while True:
+#     cell = vtk.vtkIdList()
+#     if cells.GetNextCell(cell) == 0:
+#         break
+#     face = [cell.GetId(j) for j in range(cell.GetNumberOfIds())]
+#     vmtk_faces.append(face)
 
-# Convert vertices and faces to NumPy arrays
-vmtk_vertices = np.array(vmtk_vertices)
-vmtk_faces = np.array(vmtk_faces)
-# mesh_copy = tm.load_mesh("C:/Users/nguc4116/Desktop/output_mesh_smooth.stl", enable_post_processing=True, solid=True) 
+# # Convert vertices and faces to NumPy arrays
+# vmtk_vertices = np.array(vmtk_vertices)
+# vmtk_faces = np.array(vmtk_faces)
+# # mesh_copy = tm.load_mesh("C:/Users/nguc4116/Desktop/output_mesh_smooth.stl", enable_post_processing=True, solid=True) 
 
-mesh_bound = tm.Trimesh(vertices=vertices, faces=faces, enable_post_processing=True, solid=True)
-mesh_copy = tm.Trimesh(vertices=vmtk_vertices, faces=vmtk_faces, enable_post_processing=True, solid=True)
-mesh_sub = sk.pre.contract(mesh_copy, epsilon=0.07)
-mesh_sub = sk.pre.fix_mesh(mesh_sub, remove_disconnected=5, inplace=False)
+# mesh_bound = tm.Trimesh(vertices=vertices, faces=faces, enable_post_processing=True, solid=True)
+# mesh_copy = tm.Trimesh(vertices=vmtk_vertices, faces=vmtk_faces, enable_post_processing=True, solid=True)
+# mesh_sub = sk.pre.contract(mesh_copy, epsilon=0.07)
+# mesh_sub = sk.pre.fix_mesh(mesh_sub, remove_disconnected=5, inplace=False)
 
-skeleton_points_1 = skeleton_points_1
-skeleton_points_2 = mesh_sub.vertices
+# skeleton_points_1 = skeleton_points_1
+# skeleton_points_2 = mesh_sub.vertices
 
 
-skeleton_3 = sk.skeletonize.by_wavefront(mesh_sub, waves=1)
-skeleton_3 = sk.post.clean_up(skeleton_3)
-skeleton_3 = sk.post.smooth(skeleton_3)
-edges_3 = skeleton_3.edges
+# skeleton_3 = sk.skeletonize.by_wavefront(mesh_sub, waves=1)
+# skeleton_3 = sk.post.clean_up(skeleton_3)
+# skeleton_3 = sk.post.smooth(skeleton_3)
+# edges_3 = skeleton_3.edges
 
-vertices_count = {}
-endpoint_idx = []
-for edge in edges_3:
-    vertice_1 = edge[0]
-    vertice_2 = edge[1]
+# vertices_count = {}
+# endpoint_idx = []
+# for edge in edges_3:
+#     vertice_1 = edge[0]
+#     vertice_2 = edge[1]
 
-    if vertice_1 not in vertices_count:
-        vertices_count[vertice_1] = 0
-    if vertice_2 not in vertices_count:
-        vertices_count[vertice_2] = 0
+#     if vertice_1 not in vertices_count:
+#         vertices_count[vertice_1] = 0
+#     if vertice_2 not in vertices_count:
+#         vertices_count[vertice_2] = 0
 
-    vertices_count[vertice_1] += 1
-    vertices_count[vertice_2] += 1
+#     vertices_count[vertice_1] += 1
+#     vertices_count[vertice_2] += 1
 
-for key, value in vertices_count.items():
-    if value == 1:
-        endpoint_idx.append(key)
+# for key, value in vertices_count.items():
+#     if value == 1:
+#         endpoint_idx.append(key)
 
-end_points = skeleton_3.vertices[endpoint_idx]
+# end_points = skeleton_3.vertices[endpoint_idx]
 
-vertices_count = {}
-endpoint_idx = []
-for line in connected_lines:
-    vertice_1 = line[0]
-    vertice_2 = line[-1]
+# vertices_count = {}
+# endpoint_idx = []
+# for line in connected_lines:
+#     vertice_1 = line[0]
+#     vertice_2 = line[-1]
 
-    if vertice_1 not in vertices_count:
-        vertices_count[vertice_1] = 0
-    if vertice_2 not in vertices_count:
-        vertices_count[vertice_2] = 0
+#     if vertice_1 not in vertices_count:
+#         vertices_count[vertice_1] = 0
+#     if vertice_2 not in vertices_count:
+#         vertices_count[vertice_2] = 0
 
-    vertices_count[vertice_1] += 1
-    vertices_count[vertice_2] += 1
+#     vertices_count[vertice_1] += 1
+#     vertices_count[vertice_2] += 1
 
-for key, value in vertices_count.items():
-    if value == 1:
-        endpoint_idx.append(key)
+# for key, value in vertices_count.items():
+#     if value == 1:
+#         endpoint_idx.append(key)
 
-end_points_2 = skeleton_points_1[endpoint_idx]  
-tree = KDTree(end_points)
-distances, indices = tree.query(end_points_2, k=1)
-near_end_points_2 = end_points[indices]
+# end_points_2 = skeleton_points_1[endpoint_idx]  
+# tree = KDTree(end_points)
+# distances, indices = tree.query(end_points_2, k=1)
+# near_end_points_2 = end_points[indices]
 
-for line in connected_lines:
-    for idx, end_idx in enumerate(endpoint_idx):
-        mid_point = (near_end_points_2[idx] + skeleton_points_1[end_idx]) / 2
-        if mesh_bound.contains(np.array([near_end_points_2[idx]]))[0] == True and mesh_bound.contains(np.array([mid_point]))[0] == True:
-            if end_idx == line[0]:
-                new_idx = skeleton_points_1.shape[0]
-                skeleton_points_1 = np.vstack([skeleton_points_1, near_end_points_2[idx]])
-                line.insert(0, new_idx)
-                break
-            elif end_idx == line[-1]:
-                new_idx = skeleton_points_1.shape[0]
-                skeleton_points_1 = np.vstack([skeleton_points_1, near_end_points_2[idx]])
-                line.append(new_idx)
-                break
+# for line in connected_lines:
+#     for idx, end_idx in enumerate(endpoint_idx):
+#         mid_point = (near_end_points_2[idx] + skeleton_points_1[end_idx]) / 2
+#         if mesh_bound.contains(np.array([near_end_points_2[idx]]))[0] == True and mesh_bound.contains(np.array([mid_point]))[0] == True:
+#             if end_idx == line[0]:
+#                 new_idx = skeleton_points_1.shape[0]
+#                 skeleton_points_1 = np.vstack([skeleton_points_1, near_end_points_2[idx]])
+#                 line.insert(0, new_idx)
+#                 break
+#             elif end_idx == line[-1]:
+#                 new_idx = skeleton_points_1.shape[0]
+#                 skeleton_points_1 = np.vstack([skeleton_points_1, near_end_points_2[idx]])
+#                 line.append(new_idx)
+#                 break
 
-for line in connected_lines:
-    for i in range(len(line) - 2):
-        point_1 = skeleton_points_1[line[i]]
-        point_2 = skeleton_points_1[line[i+1]]
-        point_3 = skeleton_points_1[line[i+2]]
-        angle = angle_between_lines(point_1, point_2, point_3)
-        if angle < 100:
-            new_mid_point = find_midpoint_perpendicular_3d(point_1, point_2, point_3)
-            skeleton_points_1[line[i+1]] = new_mid_point
+# for line in connected_lines:
+#     for i in range(len(line) - 2):
+#         point_1 = skeleton_points_1[line[i]]
+#         point_2 = skeleton_points_1[line[i+1]]
+#         point_3 = skeleton_points_1[line[i+2]]
+#         angle = angle_between_lines(point_1, point_2, point_3)
+#         if angle < 100:
+#             new_mid_point = find_midpoint_perpendicular_3d(point_1, point_2, point_3)
+#             skeleton_points_1[line[i+1]] = new_mid_point
 
-loop_count = 0
-outside_idx = []
-inside_idx = []
+# loop_count = 0
+# outside_idx = []
+# inside_idx = []
 
-while loop_count < 20:
-    loop_count += 1
-    tree = KDTree(skeleton_points_2)
+# while loop_count < 20:
+#     loop_count += 1
+#     tree = KDTree(skeleton_points_2)
 
-    distances, indices = tree.query(skeleton_points_1, k=1)
-    new_skeleton_points_1 = skeleton_points_2[indices]
+#     distances, indices = tree.query(skeleton_points_1, k=1)
+#     new_skeleton_points_1 = skeleton_points_2[indices]
 
-    for index, point in enumerate(skeleton_points_1):
-        if indices[index] in inside_idx:
-            skeleton_points_1[index] = new_skeleton_points_1[index]
-        else:
-            if indices[index] not in outside_idx:
-                is_bound = mesh_bound.contains([new_skeleton_points_1[index]])[0]
+#     for index, point in enumerate(skeleton_points_1):
+#         if indices[index] in inside_idx:
+#             skeleton_points_1[index] = new_skeleton_points_1[index]
+#         else:
+#             if indices[index] not in outside_idx:
+#                 is_bound = mesh_bound.contains([new_skeleton_points_1[index]])[0]
 
-                if is_bound:
-                    skeleton_points_1[index] = new_skeleton_points_1[index]
-                    inside_idx.append(indices[index])
-                else:
-                    outside_idx.append(indices[index])
+#                 if is_bound:
+#                     skeleton_points_1[index] = new_skeleton_points_1[index]
+#                     inside_idx.append(indices[index])
+#                 else:
+#                     outside_idx.append(indices[index])
 
-    for line in connected_lines:
-        for i in range(len(line) - 2):
-            point_1 = skeleton_points_1[line[i]]
-            point_2 = skeleton_points_1[line[i+1]]
-            point_3 = skeleton_points_1[line[i+2]]
-            angle = angle_between_lines(point_1, point_2, point_3)
-            if angle < 100:
-                new_mid_point = (point_1 + point_3)/2
-                skeleton_points_1[line[i+1]] = new_mid_point
+#     for line in connected_lines:
+#         for i in range(len(line) - 2):
+#             point_1 = skeleton_points_1[line[i]]
+#             point_2 = skeleton_points_1[line[i+1]]
+#             point_3 = skeleton_points_1[line[i+2]]
+#             angle = angle_between_lines(point_1, point_2, point_3)
+#             if angle < 100:
+#                 new_mid_point = (point_1 + point_3)/2
+#                 skeleton_points_1[line[i+1]] = new_mid_point
 
-    new_connected_lines = []
+#     new_connected_lines = []
 
-    for line in connected_lines:
-        new_line = []
+#     for line in connected_lines:
+#         new_line = []
 
-        new_line.append(line[0])
-        for i in range(len(line)-1):
-            point_1 = skeleton_points_1[line[i]]
-            point_2 = skeleton_points_1[line[i+1]]
-            distance = euclidean_distance(point_1, point_2)
-            new_num_points = int(distance/resolution) - 2
+#         new_line.append(line[0])
+#         for i in range(len(line)-1):
+#             point_1 = skeleton_points_1[line[i]]
+#             point_2 = skeleton_points_1[line[i+1]]
+#             distance = euclidean_distance(point_1, point_2)
+#             new_num_points = int(distance/resolution) - 2
             
-            if new_num_points > 0:
-                interpolated_points = interpolate_points(point_1, point_2, new_num_points)
-                new_indices = []
-                for point in interpolated_points:
-                    new_indices.append(skeleton_points_1.shape[0])
-                    skeleton_points_1 = np.vstack([skeleton_points_1, point])
+#             if new_num_points > 0:
+#                 interpolated_points = interpolate_points(point_1, point_2, new_num_points)
+#                 new_indices = []
+#                 for point in interpolated_points:
+#                     new_indices.append(skeleton_points_1.shape[0])
+#                     skeleton_points_1 = np.vstack([skeleton_points_1, point])
                 
-                new_line += new_indices
-            new_line.append(line[i+1])
-        new_connected_lines.append(new_line)
+#                 new_line += new_indices
+#             new_line.append(line[i+1])
+#         new_connected_lines.append(new_line)
 
-    connected_lines = new_connected_lines
+#     connected_lines = new_connected_lines
 
-line_traces = []
-visualized_skeleton_points = generate_points(skeleton_points_2, 1, 'red')
-# visualized_skeleton_points_1 = generate_points(old_skeleton_points_1, 3, 'black')
-visualized_thin_points = generate_points(skeleton_points_1, 3, 'green')
-visualized_boundary_points = generate_points(vertices, 1, 'blue')
+# line_traces = []
+# visualized_skeleton_points = generate_points(skeleton_points_2, 1, 'red')
+# # visualized_skeleton_points_1 = generate_points(old_skeleton_points_1, 3, 'black')
+# visualized_thin_points = generate_points(skeleton_points_1, 3, 'green')
+# visualized_boundary_points = generate_points(vertices, 1, 'blue')
 
-for line in connected_lines:
-    for i in range(len(line) - 1):
-        line_traces.append(generate_lines(np.array([skeleton_points_1[line[i]], skeleton_points_1[line[i+1]]]), 2, 'green'))
+# for line in connected_lines:
+#     for i in range(len(line) - 1):
+#         line_traces.append(generate_lines(np.array([skeleton_points_1[line[i]], skeleton_points_1[line[i+1]]]), 2, 'green'))
 
-show_figure([
-            visualized_boundary_points, 
-            visualized_skeleton_points, 
-            visualized_thin_points,
-            # visualized_skeleton_points_1,
-        ] 
-            # + line_traces
-)
+# show_figure([
+#             visualized_boundary_points, 
+#             visualized_skeleton_points, 
+#             visualized_thin_points,
+#             # visualized_skeleton_points_1,
+#         ] 
+#             # + line_traces
+# )
 
-# Calculate colors based on values using the "plasma" colormap
-# Define the trace for the mesh
-# Smoother:
-# Create a VTK PolyData object representing the surface
-surface_data = vtk.vtkPolyData()
-points = vtk.vtkPoints()
-for vertex in vertices:
-    points.InsertNextPoint(vertex)
-surface_data.SetPoints(points)
+# # Calculate colors based on values using the "plasma" colormap
+# # Define the trace for the mesh
+# # Smoother:
+# # Create a VTK PolyData object representing the surface
+# surface_data = vtk.vtkPolyData()
+# points = vtk.vtkPoints()
+# for vertex in vertices:
+#     points.InsertNextPoint(vertex)
+# surface_data.SetPoints(points)
 
-# Add polygons to the surface
-polygons = vtk.vtkCellArray()
-for face in faces:
-    polygon = vtk.vtkPolygon()
-    for index in face:
-        polygon.GetPointIds().InsertNextId(index)
-    polygons.InsertNextCell(polygon)
-surface_data.SetPolys(polygons)
+# # Add polygons to the surface
+# polygons = vtk.vtkCellArray()
+# for face in faces:
+#     polygon = vtk.vtkPolygon()
+#     for index in face:
+#         polygon.GetPointIds().InsertNextId(index)
+#     polygons.InsertNextCell(polygon)
+# surface_data.SetPolys(polygons)
 
-mySmoother = vmtkscripts.vmtkSurfaceSmoothing()
-mySmoother.Surface = surface_data
-mySmoother.PassBand = 0.1
-mySmoother.NumberOfIterations = 20
-mySmoother.Execute()
-smoothed_surface = mySmoother.Surface
+# mySmoother = vmtkscripts.vmtkSurfaceSmoothing()
+# mySmoother.Surface = surface_data
+# mySmoother.PassBand = 0.1
+# mySmoother.NumberOfIterations = 20
+# mySmoother.Execute()
+# smoothed_surface = mySmoother.Surface
 
-# Get vertices and faces from the surface
-vertices = []
-faces = []
+# # Get vertices and faces from the surface
+# vertices = []
+# faces = []
 
-points = smoothed_surface.GetPoints()
-for i in range(points.GetNumberOfPoints()):
-    point = points.GetPoint(i)
-    vertices.append(point)
+# points = smoothed_surface.GetPoints()
+# for i in range(points.GetNumberOfPoints()):
+#     point = points.GetPoint(i)
+#     vertices.append(point)
 
-cells = smoothed_surface.GetPolys()
-cells.InitTraversal()
-while True:
-    cell = vtk.vtkIdList()
-    if cells.GetNextCell(cell) == 0:
-        break
-    face = [cell.GetId(j) for j in range(cell.GetNumberOfIds())]
-    faces.append(face)
+# cells = smoothed_surface.GetPolys()
+# cells.InitTraversal()
+# while True:
+#     cell = vtk.vtkIdList()
+#     if cells.GetNextCell(cell) == 0:
+#         break
+#     face = [cell.GetId(j) for j in range(cell.GetNumberOfIds())]
+#     faces.append(face)
 
-vertices = np.array(vertices)
-faces = np.array(faces)
+# vertices = np.array(vertices)
+# faces = np.array(faces)
 
-tree = KDTree(skeleton_points_1)
-distances, indices = tree.query(vertices, k=1)
+# tree = KDTree(skeleton_points_1)
+# distances, indices = tree.query(vertices, k=1)
 
 mesh = go.Mesh3d(
     x=vertices[:, 0],
@@ -429,9 +441,9 @@ mesh = go.Mesh3d(
     i=faces[:, 0],
     j=faces[:, 1],
     k=faces[:, 2],
-    intensity=distances,
-    colorscale='plasma',
-    colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
+    # intensity=distances,
+    # colorscale='plasma',
+    # colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
 )
 
 # Create the figure
