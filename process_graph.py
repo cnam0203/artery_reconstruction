@@ -15,7 +15,17 @@ def find_graphs(skeleton):
 
     connected_lines = []
     for i in range(skeleton_skan.n_paths):
-        connected_lines.append(skeleton_skan.path(i).tolist())
+        points = skeleton_skan.path(i).tolist()
+
+        line = []
+        for point in points:
+            pos = skeleton_points[point]
+            if pos[0] == 0 and pos[1] == 0 and pos[2] == 0:
+                continue
+            
+            line.append(point)
+        
+        connected_lines.append(line)
     
     count_points = {}
     end_points = []
@@ -37,7 +47,7 @@ def find_graphs(skeleton):
             end_points.append(key)
         elif value > 2:
             junction_points.append(key)
-                
+    
     return skeleton_points, end_points, junction_points, connected_lines
 
 

@@ -206,7 +206,7 @@ def preprocess_data(
     
     unchanged = False
     loop = 0
-    while loop <= 50 and unchanged == False:
+    while loop <= 200 and unchanged == False:
         loop += 1
         old_count = np.argwhere(cex_data == 1).shape[0]
         cex_data = remove_noisy_voxels(cex_data, neighbor_threshold_2, False)
