@@ -22,6 +22,10 @@ from visualize_graph import *
 from slice_selection import *
 from visualize_mesh import *
 
+import plotly.graph_objs as go
+from skimage import morphology
+from scipy.ndimage import distance_transform_edt
+
 
 def reconstruct_surface(segment_image,
                   original_image=None, 
@@ -42,22 +46,11 @@ def reconstruct_surface(segment_image,
     mask_data, cex_data, surf_data = preprocess_data(original_data, segment_data, index, intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
     
     artery_points = np.argwhere(cex_data != 0)
-    visualized_artery_points = generate_points(artery_points, 3, 'green')
-        
-    show_figure([
-                visualized_artery_points,
-            ] 
-    )
-    
-    # visualize_artery_mesh(segment_data, voxel_sizes, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], folder_path + 'all__split', True)
-
-    # # Find the voxel-based skeleton
-    # artery_points = np.argwhere(cex_data != 0)
-    
-
-    # skeleton = skeletonize(cex_data)
-    # skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
-    
+    skeleton = skeletonize(cex_data)
+    skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
+    distance_transform = distance_transform_edt(cex_data)
+    boundary_points = np.argwhere(distance_transform == 1)
+    print(skeleton_points.shape)
     # max_length = 2
     # reserved_points = {}
     
@@ -226,8 +219,8 @@ def reconstruct_surface(segment_image,
     
     # left_paths = []
     # right_paths = []  
+    # print(reserved_points)
     
-
     # if 5 in index or 6 in index:
     #     endpoint_pos = skeleton_points[end_points]
     #     sorted_indices = np.argsort(endpoint_pos[:, 2])
@@ -251,8 +244,8 @@ def reconstruct_surface(segment_image,
     #     skeleton_points, connected_lines = reinterpolate_connected_lines(skeleton_points, connected_lines)
     #     left_points, right_points = extract_point_position(skeleton_points, connected_lines, left_paths, right_paths)
     #     touch_points, artery_data = find_touchpoints(mask_data, left_points, right_points, 1)
-    #     visualize_artery_mesh(artery_data, voxel_sizes, [1], folder_path + 'all__split', True)
-        # visualize_artery_mesh(mask_data, voxel_sizes, [1], folder_path + '_orginal')
+    #     visualize_artery_mesh(artery_data, voxel_sizes, [1, 2], folder_path + '_split')
+    #     visualize_artery_mesh(mask_data, voxel_sizes, [1], folder_path + '_orginal')
         
     # line_groups = [common_paths, left_paths, right_paths, undefined_paths]
     # line_colors = ['red', 'blue', 'green', 'orange', ]
@@ -263,27 +256,29 @@ def reconstruct_surface(segment_image,
     #                 color = line_colors[i]
     #                 line_traces.append(generate_lines(skeleton_points[connected_line], 4, color))
     
-    # visualized_skeleton_points = generate_points(skeleton_points, 3)
+    visualized_skeleton_points = generate_points(skeleton_points, 1, 'red')
+    visualized_boundary_points = generate_points(boundary_points, 1, 'blue')
     # visualized_end_points = generate_points(skeleton_points[end_points], 5, 'red')
     # visualized_junction_points = generate_points(skeleton_points[junction_points], 5, 'green')
     # visualized_artery_points = generate_points(artery_points, 1, 'blue')
         
     # show_figure([
+    #             visualized_boundary_points, 
     #             visualized_skeleton_points, 
-    #             visualized_end_points, 
-    #             visualized_junction_points,
+    #             # visualized_end_points, 
+    #             # visualized_junction_points,
     #             # visualized_artery_points,
     #         ] 
-    #             + line_traces
+    #             # + line_traces
     # )
     
-    return
+    # return
 
 if __name__ == "__main__":
 
     # Calculate runtime - record start time
     start_time = time.time()
-    dataset_dir = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/'
+    dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
     
     # Specify the path to your NIfTI file
     
@@ -319,7 +314,7 @@ if __name__ == "__main__":
     segment_file_path = '/Users/apple/Downloads/sub-25_run-1_mra_eICAB_CW (1).nii'
     original_file_path = '/Users/apple/Downloads/sub-25_run-1_mra_resampled.nii'
     
-    folder_path = '/Users/apple/Desktop/' + segment_file_path.split('/')[-1].split('.')[-2]
+    folder_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/mesh/' + segment_file_path.split('/')[-1].split('.')[-3]
     # Load the NIfTI image
     segment_image = nib.load(segment_file_path)
     original_image = nib.load(original_file_path)
@@ -335,7 +330,7 @@ if __name__ == "__main__":
     reconstruct_surface(
                     segment_image, 
                     original_image, 
-                    index=[2], 
+                    index=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 
                     intensity_threshold_1=intensity_threshold_1, 
                     intensity_threshold_2=intensity_threshold_2, 
                     gaussian_sigma=gaussian_sigma, 
