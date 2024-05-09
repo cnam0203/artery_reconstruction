@@ -1975,9 +1975,7 @@ def connect_undefined_paths(left_paths, right_paths, connected_lines, defined_pa
                 path_2 = expanded_points[adjacent_point][1]
                 distance_1, nearest_point_1 = distance_point_to_line(original_point, path_1[0], path_1[-1], skeleton_points)
                 distance_2, nearest_point_2 = distance_point_to_line(original_point, path_2[0], path_2[-1], skeleton_points)
-                
-                print(original_point, distance_1, distance_2, skeleton_points[nearest_point_1], skeleton_points[nearest_point_2])
-                
+                                
                 if distance_1 < distance_2:
                     if pos == 0:
                         new_line = [nearest_point_1] + select_line
