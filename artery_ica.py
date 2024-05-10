@@ -388,10 +388,10 @@ def find_skeleton_ica(segment_image, original_image=None, index=None, intensity_
 
     visualized_thin_points = generate_points(center_points, 2, 'green')
 
-    show_figure([
-                visualized_thin_points,
-            ] 
-    )
+    # show_figure([
+    #             visualized_thin_points,
+    #         ] 
+    # )
 
     return surf_data
     # # Prepare lines for centerline from our algorithm

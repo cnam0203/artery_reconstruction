@@ -58,6 +58,38 @@ def generate_points(points, point_size=2, point_color='black'):
         text=[f'Pos {i}' for i in range(points.shape[0])]
     )
 
+def generate_points_values(points, point_size=2, point_color='black', point_values=[]):
+    """
+    The function `generate_points` creates a 3D scatter plot of points with specified size and color.
+    
+    :param points: The `points` parameter in the `generate_points` function is expected to be a 2D NumPy
+    array containing the coordinates of the points in a 3D space. Each row of the array represents a
+    point, and the columns represent the x, y, and z coordinates of that point
+    :param point_size: The `point_size` parameter in the `generate_points` function is used to specify
+    the size of the markers representing the points in a 3D scatter plot. This parameter allows you to
+    control the visual appearance of the points by setting their size. The default value for
+    `point_size` is, defaults to 2 (optional)
+    :param point_color: The `point_color` parameter in the `generate_points` function is used to specify
+    the color of the points in the 3D scatter plot. You can provide a color name (e.g., 'red', 'blue',
+    'green') or a hexadecimal color code (e.g., '#FF, defaults to black (optional)
+    :return: The function `generate_points` is returning a Scatter3d plot with the specified points,
+    point size, and point color. The plot will display the points in a 3D space as markers with the
+    given size and color.
+    """
+
+    return go.Scatter3d(
+        x=points[:, 0],
+        y=points[:, 1],
+        z=points[:, 2],
+        mode='markers',
+        marker=dict(
+            size=point_size,
+            color=point_color
+        ),
+        name='Points',
+        text=[f'{point_values[i]}' for i in range(points.shape[0])]
+    )
+
 def generate_points_viridis(points, point_size=2, point_values=None):
     """
     The function `generate_points` creates a 3D scatter plot of points with specified size and color.
