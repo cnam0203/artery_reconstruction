@@ -356,7 +356,7 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
                     skeleton[int(new_centerpoint[0])][int(new_centerpoint[1])][int(new_centerpoint[2])] = 1
 
                     new_points[0].append(new_centerpoint)
-                    visualize_slice(intensity_slice, segment_slice, segment_slice, [], point1[axis], new_centerpoint[axis] - point1[axis], axis)
+                    # visualize_slice(intensity_slice, segment_slice, segment_slice, [], point1[axis], new_centerpoint[axis] - point1[axis], axis)
 
 
         if line[-1] in end_points:
@@ -443,7 +443,7 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
                     skeleton[int(new_centerpoint[0])][int(new_centerpoint[1])][int(new_centerpoint[2])] = 1
 
                     new_points[1].append(new_centerpoint)
-                    visualize_slice(intensity_slice, segment_slice, segment_slice, [], point1[axis], new_centerpoint[axis] - point1[axis], axis)
+                    # visualize_slice(intensity_slice, segment_slice, segment_slice, [], point1[axis], new_centerpoint[axis] - point1[axis], axis)
 
         
         indices = []
@@ -552,6 +552,72 @@ def angle_between_lines(point1, point2, point3):
 
     return angle_degrees
 
+def artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=0):
+    new_splitted_lines, splitted_branches, point_clusters, colors = split_smooth_lines(smooth_connected_lines, smooth_points, distance_threshold)
+
+    tree = KDTree(smooth_points)
+    distances, indices = tree.query(vmtk_boundary_vertices, k=1)
+
+    sum_distances = [0] * len(new_splitted_lines)
+    min_distances = [100000] * len(new_splitted_lines)
+    point_counts = [0] * len(new_splitted_lines)
+    mean_distances = [0] * len(new_splitted_lines)
+
+    for i in range(vertices.shape[0]):
+        if indices[i] in point_clusters:
+            sum_distances[point_clusters[indices[i]]] += distances[i]
+            point_counts[point_clusters[indices[i]]] += 1
+
+            if distances[i] < min_distances[point_clusters[indices[i]]]:
+                min_distances[point_clusters[indices[i]]] = distances[i]
+
+    for i in range(len(sum_distances)):
+        if metric == 0:
+            mean_distances[i] = min_distances[i]
+        else:
+            print(point_counts[i])
+            mean_distances[i] = sum_distances[i]/(point_counts[i]+0.0001)
+
+    #Show metric values along the centerline
+    cur_branch = splitted_branches[0]
+    cur_pos = 0
+    for i in range(len(new_splitted_lines)):
+        if splitted_branches[i] != cur_branch:
+            cur_pos = 0
+            cur_branch = splitted_branches[i]
+        
+        if cur_pos == 0:
+            print("Branch ", cur_branch)
+
+        print(f"""At {cur_pos}: """, mean_distances[i]*2, ' mm')
+        cur_pos += distance_threshold
+
+    #Apply metric to points in centerline
+    points_values = []
+    for i in range(smooth_points.shape[0]):
+        diameter = 0
+        if i in point_clusters:
+            diameter = mean_distances[point_clusters[i]]*2
+        points_values.append(diameter)
+
+    
+    return new_splitted_lines, points_values
+
+
+def perpendicular_planes(point1, point2):
+    # Get the direction vector of the line
+    direction_vector = point2 - point1
+
+    a, b, c = direction_vector
+    d1 = -(a*point1[0] + b*point1[1] + c*point1[2])
+    d2 = -(a*point2[0] + b*point2[1] + c*point2[2])
+
+    v1 = [a, b, c, d1]
+    v2 = [a, b, c, d2]
+
+    return v1, v2
+
+# Initialize
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
 segment_file_path = dataset_dir + 'BCW-1205-RES.nii.gz'
 # segment_file_path = dataset_dir + 'sub-9_run-1_mra_eICAB_CW.nii.gz'
@@ -599,73 +665,44 @@ skeleton_points = voxel_sizes*(skeleton_points+0.5)
 vmtk_skeleton_vertices, vmtk_skeleton_faces = vmtk_smooth_mesh(vertices, faces, 2000)
 smooth_points, smooth_connected_lines = smooth_centerline(vmtk_skeleton_vertices, skeleton_points, connected_lines)
 
-
 # Extract boundary
 vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
 vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 5000, 1)
 
-# Visualize
-line_traces = []
-visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1)
-# visualized_skeleton_points = generate_points_values(smooth_points, 2, 'green', points_values)
-visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
-
-for idx, line in enumerate(connected_lines):
-    line_traces.append(generate_lines(skeleton_points[line], 2))
-
-show_figure(line_traces + [visualized_boundary_points, visualized_skeleton_points])
-
 # Calculate distance
-distance_threshold =0.5
-new_splitted_lines, splitted_branches, point_clusters, colors = split_smooth_lines(smooth_connected_lines, smooth_points, distance_threshold)
+distance_threshold = 0.25
+new_splitted_lines, points_values = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
+chosen_vertices = []
 
-tree = KDTree(smooth_points)
-distances, indices = tree.query(vmtk_boundary_vertices, k=1)
+ranges = [[10, 20], [45, 55]]
+for itrval in ranges:
+    for line in new_splitted_lines[itrval[0]:itrval[1]]:
+        point1, point2 = smooth_points[line[0]], smooth_points[line[-1]]
+        plane1_normal, plane2_normal = perpendicular_planes(point1, point2)
 
-sum_distances = [0] * len(new_splitted_lines)
-min_distances = [100] * len(new_splitted_lines)
-point_counts = [0] * len(new_splitted_lines)
-mean_distances = [0] * len(new_splitted_lines)
+        d1 = plane1_normal[3]
+        d2 = plane2_normal[3]
 
-for i in range(vertices.shape[0]):
-    if indices[i] in point_clusters:
-        sum_distances[point_clusters[indices[i]]] += distances[i]
-        point_counts[point_clusters[indices[i]]] += 1
+        cur = d1
+        if d1 > d2:
+            d1 = d2
+            d2 = cur
+        
+        for idx, vertex in enumerate(vmtk_boundary_vertices):
+            d3 =  -(plane1_normal[0]*vertex[0] + plane1_normal[1]*vertex[1] + plane1_normal[2]*vertex[2])
+            if d3 >= d1 and d3 <= d2:
+                chosen_vertices.append(idx)
 
-        if distances[i] < min_distances[point_clusters[indices[i]]]:
-            min_distances[point_clusters[indices[i]]] = distances[i]
+    # print("Equation of plane 1: {}x + {}y + {}z = {}".format(plane1_normal[0], plane1_normal[1], plane1_normal[2], plane1_normal[3]))
+    # print("Equation of plane 2: {}x + {}y + {}z = {}".format(plane2_normal[0], plane2_normal[1], plane2_normal[2], plane2_normal[3]))
 
-for i in range(len(sum_distances)):
-    # mean_distances[i] = min_distances[i]
-    mean_distances[i] = sum_distances[i]/(point_counts[i]+0.0001)
-
-
-cur_branch = splitted_branches[0]
-cur_pos = 0
-for i in range(len(new_splitted_lines)):
-    if splitted_branches[i] != cur_branch:
-        cur_pos = 0
-        cur_branch = splitted_branches[i]
-    
-    if cur_pos == 0:
-        print("Branch ", cur_branch)
-
-    print(f"""At {cur_pos}: """, mean_distances[i]*2, ' mm')
-    cur_pos += distance_threshold
-
-
-points_values = []
-for i in range(smooth_points.shape[0]):
-    diameter = 0
-    if i in point_clusters:
-        diameter = mean_distances[point_clusters[i]]*2
-    points_values.append(diameter)
-
+# Visualize centerline
 line_traces = []
-visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1)
-visualized_skeleton_points = generate_points_values(smooth_points, 2, 'green', points_values)
+visualized_boundary_points = generate_points(vmtk_boundary_vertices[chosen_vertices], 1)
+visualized_smooth_points = generate_points_values(smooth_points, 2, 'green', points_values)
+visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
 
 # for idx, line in enumerate(new_splitted_lines):
 #     line_traces.append(generate_lines(smooth_points[line], 2))
 
-show_figure(line_traces + [visualized_boundary_points, visualized_skeleton_points])
+show_figure(line_traces + [visualized_boundary_points, visualized_skeleton_points, visualized_smooth_points])
