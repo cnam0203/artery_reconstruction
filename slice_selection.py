@@ -3,6 +3,7 @@ import math
 import matplotlib.pyplot as plt
 from process_graph import *
 from collections import deque
+import time
 
 def visualize_slice(intensity_slice, segment_slice, fixed_slice, split_points, start_point, index, axis):
     fig, axs = plt.subplots()  # Create figure and axes objects
@@ -27,14 +28,17 @@ def visualize_slice(intensity_slice, segment_slice, fixed_slice, split_points, s
         rect = plt.Rectangle((idx[1] - 0.5, idx[0] - 0.5), 1, 1, linewidth=2, edgecolor='blue', facecolor='none')
         axs.add_patch(rect)
     
-    for idx in changed_indices:
-        rect = plt.Rectangle((idx[1] - 0.5, idx[0] - 0.5), 1, 1, linewidth=0.5, edgecolor='red', facecolor='none')
-        axs.add_patch(rect)
+    # for idx in changed_indices:
+    #     rect = plt.Rectangle((idx[1] - 0.5, idx[0] - 0.5), 1, 1, linewidth=0.5, edgecolor='red', facecolor='none')
+    #     axs.add_patch(rect)
         
     axs.axis('off')  # Hide axes
     axs.set_title(f"{axis_name} - {start_point + index}")
-    plt.show()
-    
+    # plt.show()
+    plt.show(block=False)
+    plt.pause(0.5)
+    plt.close()
+
     return
 
 def select_slice(preprocessed_data, index, axis, min_coords, max_coords):
