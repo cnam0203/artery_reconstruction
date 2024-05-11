@@ -28,6 +28,7 @@ from slice_selection import *
 from visualize_mesh import *
 from marcube import *
 from artery_ica import *
+from ray_intersection import 
 
 
 import plotly.graph_objs as go
@@ -603,6 +604,48 @@ def artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines
     
     return new_splitted_lines, points_values
 
+def find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces):
+    chosen_vertices = []
+
+    for line in new_splitted_lines:
+        ring_vertices = []
+        point1, point2 = smooth_points[line[0]], smooth_points[line[-1]]
+        plane1_normal, plane2_normal = perpendicular_planes(point1, point2)
+
+        d1 = plane1_normal[3]
+        d2 = plane2_normal[3]
+
+        cur = d1
+        if d1 > d2:
+            d1 = d2
+            d2 = cur
+        
+        for idx, vertex in enumerate(vmtk_boundary_vertices):
+            d3 =  -(plane1_normal[0]*vertex[0] + plane1_normal[1]*vertex[1] + plane1_normal[2]*vertex[2])
+            if d3 >= d1 and d3 <= d2:
+                ring_vertices.append(idx)
+
+        surfaces = select_faces_with_chosen_vertices(vmtk_boundary_vertices, vmtk_boundary_faces, ring_vertices)
+        filter_vertices = []
+        
+        for vertex_index in ring_vertices:
+            vertex = vmtk_boundary_vertices[vertex_index]
+            intersection_point = find_projection_point_on_line(point1, point2, vertex)
+            
+            exist = False
+            for surface in surfaces:
+                is_intersect = ray_intersects_triangle(vertex, intersection_point, surface)
+                
+                if is_intersect:
+                    exist = True
+                    break
+            
+            if not exist:
+                filter_vertices.append(vertex_index)
+        
+        chosen_vertices.append(filter_vertices)
+        
+    return chosen_vertices
 
 def perpendicular_planes(point1, point2):
     # Get the direction vector of the line
@@ -672,29 +715,7 @@ vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 
 # Calculate distance
 distance_threshold = 0.25
 new_splitted_lines, points_values = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
-chosen_vertices = []
-
-ranges = [[10, 20], [45, 55]]
-for itrval in ranges:
-    for line in new_splitted_lines[itrval[0]:itrval[1]]:
-        point1, point2 = smooth_points[line[0]], smooth_points[line[-1]]
-        plane1_normal, plane2_normal = perpendicular_planes(point1, point2)
-
-        d1 = plane1_normal[3]
-        d2 = plane2_normal[3]
-
-        cur = d1
-        if d1 > d2:
-            d1 = d2
-            d2 = cur
-        
-        for idx, vertex in enumerate(vmtk_boundary_vertices):
-            d3 =  -(plane1_normal[0]*vertex[0] + plane1_normal[1]*vertex[1] + plane1_normal[2]*vertex[2])
-            if d3 >= d1 and d3 <= d2:
-                chosen_vertices.append(idx)
-
-    # print("Equation of plane 1: {}x + {}y + {}z = {}".format(plane1_normal[0], plane1_normal[1], plane1_normal[2], plane1_normal[3]))
-    # print("Equation of plane 2: {}x + {}y + {}z = {}".format(plane2_normal[0], plane2_normal[1], plane2_normal[2], plane2_normal[3]))
+ring_vertices = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
 
 # Visualize centerline
 line_traces = []
