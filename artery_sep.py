@@ -2015,8 +2015,8 @@ if __name__ == "__main__":
     # segment_file_path = '/Users/apple/Downloads/output-1/TOF_eICAB_CW.nii.gz'
     # original_file_path = '/Users/apple/Downloads/output-1/TOF_resampled.nii.gz'
 
-    # segment_file_path = 'sub-25_run-1_mra_eICAB_CW (1).nii'
-    # original_file_path = 'sub-25_run-1_mra_resampled.nii'
+    segment_file_path = '/Users/apple/Downloads/sub-25_run-1_mra_eICAB_CW (1).nii'
+    original_file_path = '/Users/apple/Downloads/sub-25_run-1_mra_resampled.nii'
 
     segment_file_path = '/Users/apple/Downloads/sub61_harvard_watershed.nii.gz'
     original_file_path = '/Users/apple/Downloads/sub-61_acq-tof_angio_resampled.nii.gz'

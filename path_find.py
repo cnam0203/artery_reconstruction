@@ -45,7 +45,6 @@ def reconstruct_surface(segment_image,
     voxel_sizes = segment_image.header.get_zooms()
     mask_data, cex_data, surf_data = preprocess_data(original_data, segment_data, index, intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
     
-    # Find the voxel-based skeleton
     artery_points = np.argwhere(cex_data != 0)
     skeleton = skeletonize(cex_data)
     skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
@@ -287,8 +286,8 @@ if __name__ == "__main__":
     # segment_file_path = dataset_dir + 'TOF_multiclass_segmentation.nii.gz'
     # original_file_path = dataset_dir + 'sub-1_run-1_mra_TOF.nii.gz'
     
-    segment_file_path = dataset_dir + 'sub-4947_TOF_multiclass_segmentation.nii.gz'
-    original_file_path = dataset_dir + 'sub-4947_run-1_mra_TOF.nii.gz'
+    # segment_file_path = dataset_dir + 'sub-4947_TOF_multiclass_segmentation.nii.gz'
+    # original_file_path = dataset_dir + 'sub-4947_run-1_mra_TOF.nii.gz'
     
     # segment_file_path = dataset_dir + 'sub-2983_TOF_multiclass_segmentation.nii.gz'
     # original_file_path = dataset_dir + 'sub-2983_run-1_mra_TOF.nii.gz'
@@ -309,6 +308,11 @@ if __name__ == "__main__":
     # segment_file_path = dataset_dir + 'sub-1425_TOF_multiclass_segmentation.nii.gz'
     # original_file_path = dataset_dir + 'sub-1425_run-1_mra_TOF.nii.gz'
     
+    # segment_file_path = '/Users/apple/Downloads/output-1/TOF_eICAB_CW.nii.gz'
+    # original_file_path = '/Users/apple/Downloads/output-1/TOF_resampled.nii.gz'
+    
+    segment_file_path = '/Users/apple/Downloads/sub-25_run-1_mra_eICAB_CW (1).nii'
+    original_file_path = '/Users/apple/Downloads/sub-25_run-1_mra_resampled.nii'
     
     folder_path = 'C:/Users/nguc4116/Desktop/artery_reconstruction/mesh/' + segment_file_path.split('/')[-1].split('.')[-3]
     # Load the NIfTI image
