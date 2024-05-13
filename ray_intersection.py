@@ -1,5 +1,20 @@
 import numpy as np
 
+def is_point_on_line(point1, point2, point3):
+    # Calculate vectors
+    vector1 = point3 - point1
+    vector2 = point2 - point1
+    
+    # Calculate dot products
+    dot_product1 = np.dot(vector1, vector2)
+    dot_product2 = np.dot(vector2, vector2)
+    
+    # Calculate parameter
+    parameter = dot_product1 / dot_product2
+    
+    # Check if the parameter is between 0 and 1
+    return 0 <= parameter <= 1
+
 def ray_intersects_triangle(p1, p2, face):
     epsilon = 1e-6  # Small positive number for numerical precision
 
@@ -17,21 +32,20 @@ def ray_intersects_triangle(p1, p2, face):
     # Compute determinant to check if the ray is parallel to the triangle
     h = np.cross(direction, e2)
     a = np.dot(e1, h)
-    if abs(a) < epsilon:
-        return False  # Ray is parallel to the triangle
+    # if abs(a) < epsilon:
+    #     return False  # Ray is parallel to the triangle
 
     # Compute factors to compute u and v
     f = 1.0 / a
     s = p1 - v0
     u = f * np.dot(s, h)
     if u < 0 or u > 1:
-        return False  # Intersection is outside the triangle
+        return False, None  # Intersection is outside the triangle
 
-    # Compute q and v
     q = np.cross(s, e1)
     v = f * np.dot(direction, q)
     if v < 0 or u + v > 1:
-        return False  # Intersection is outside the triangle
+        return False, None  # Intersection is outside the triangle
 
     # Compute t to find the intersection point
     t = f * np.dot(e2, q)
@@ -41,10 +55,37 @@ def ray_intersects_triangle(p1, p2, face):
         # Check if the intersection point lies inside or outside the triangle
         w = 1 - u - v
         if 0 <= u <= 1 and 0 <= v <= 1 and 0 <= w <= 1:
-            if 0 <= t <= np.linalg.norm(p2 - p1):
-                return True
+            if is_point_on_line(p1, p2, intersection_point):
+                return True, intersection_point
+            # min_x, max_x, min_y, max_y, min_z, max_z = 0, 0, 0, 0, 0, 0
 
-    return False  # No intersection
+            # if p1[0] < p2[0]:
+            #     mix_x = p1[0]
+            #     max_x = p2[0]
+            # else:
+            #     mix_x = p2[0]
+            #     max_x = p1[0]
+
+            # if p1[1] < p2[1]:
+            #     mix_y = p1[1]
+            #     max_y = p2[1]
+            # else:
+            #     mix_y = p2[1]
+            #     max_y = p1[1]
+
+            # if p1[2] < p2[2]:
+            #     mix_z = p1[2]
+            #     max_z = p2[2]
+            # else:
+            #     mix_z = p2[2]
+            #     max_z = p1[2]
+
+            # if is_point_on_line(p1, p2, intersection_point):
+            #     return True, intersection_point
+            # if 0 <= t <= np.linalg.norm(p2 - p1):
+            #     return True
+
+    return False, None  # No intersection
 
 def find_projection_point_on_line(P1, P2, Q):
     # Compute direction vector of the line

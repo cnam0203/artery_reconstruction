@@ -12,17 +12,19 @@ def show_figure(data):
     """
     layout = go.Layout(
         scene=dict(
-            aspectmode='cube',
-            camera=dict(
-                eye=dict(x=1, y=1, z=1)
-            )
+            aspectmode='manual',
+            # camera=dict(
+            #     eye=dict(x=1, y=1, z=1)
+            # ),
+            # aspectratio=dict(x=1, y=1, z=1)
         ),
-        height=1200,  # Set height to 800 pixels
-        width=2000   # Set width to 1200 pixels
+        # height=1500,  # Set height to 800 pixels
+        # width=1500   # Set width to 1200 pixels
     )
 
     fig = go.Figure(data=data, layout=layout)
-    fig.update_layout(showlegend=False)
+    # fig.update_layout(showlegend=False)
+    fig.update_layout(autosize=False, width=2000, height=1500 )
     fig.show()
 
 

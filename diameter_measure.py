@@ -28,7 +28,7 @@ from slice_selection import *
 from visualize_mesh import *
 from marcube import *
 from artery_ica import *
-from ray_intersection import 
+from ray_intersection import *
 
 
 import plotly.graph_objs as go
@@ -576,22 +576,21 @@ def artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines
         if metric == 0:
             mean_distances[i] = min_distances[i]
         else:
-            print(point_counts[i])
             mean_distances[i] = sum_distances[i]/(point_counts[i]+0.0001)
 
     #Show metric values along the centerline
     cur_branch = splitted_branches[0]
     cur_pos = 0
-    for i in range(len(new_splitted_lines)):
-        if splitted_branches[i] != cur_branch:
-            cur_pos = 0
-            cur_branch = splitted_branches[i]
+    # for i in range(len(new_splitted_lines)):
+    #     if splitted_branches[i] != cur_branch:
+    #         cur_pos = 0
+    #         cur_branch = splitted_branches[i]
         
-        if cur_pos == 0:
-            print("Branch ", cur_branch)
+    #     if cur_pos == 0:
+    #         print("Branch ", cur_branch)
 
-        print(f"""At {cur_pos}: """, mean_distances[i]*2, ' mm')
-        cur_pos += distance_threshold
+    #     print(f"""At {cur_pos}: """, mean_distances[i]*2, ' mm')
+    #     cur_pos += distance_threshold
 
     #Apply metric to points in centerline
     points_values = []
@@ -602,13 +601,22 @@ def artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines
         points_values.append(diameter)
 
     
-    return new_splitted_lines, points_values
+    return new_splitted_lines, points_values, splitted_branches
 
 def find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces):
     chosen_vertices = []
+    unchosen_vertices = []
+    intersection_points = []
+    radiuses = []
 
     for line in new_splitted_lines:
         ring_vertices = []
+        removed_vertices = []
+        intsecpoints = []
+        distances = []
+        min_distance = 10000
+        radius = []
+
         point1, point2 = smooth_points[line[0]], smooth_points[line[-1]]
         plane1_normal, plane2_normal = perpendicular_planes(point1, point2)
 
@@ -631,21 +639,41 @@ def find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices
         for vertex_index in ring_vertices:
             vertex = vmtk_boundary_vertices[vertex_index]
             intersection_point = find_projection_point_on_line(point1, point2, vertex)
-            
+            intsecpoints.append(intersection_point)
+            distance = euclidean_distance(vertex, intersection_point)
+            distances.append(distance)
+
+            if distance < min_distance:
+                min_distance = distance
+                radius = [vertex, intersection_point]
+
+        for idx, vertex_index in enumerate(ring_vertices):
+            vertex = vmtk_boundary_vertices[vertex_index]
+            intersection_point = intsecpoints[idx]
+            distance = distances[idx]
             exist = False
+
             for surface in surfaces:
-                is_intersect = ray_intersects_triangle(vertex, intersection_point, surface)
+                is_intersect, triangular_point = ray_intersects_triangle(vertex, intersection_point, surface)
                 
                 if is_intersect:
+                    removed_vertices.append([vertex_index, intersection_point, triangular_point])
                     exist = True
                     break
             
             if not exist:
-                filter_vertices.append(vertex_index)
+                if distance > 1.5*min_distance:
+                    exist = True
+
+            if not exist:
+                filter_vertices.append([vertex_index, intersection_point])
         
         chosen_vertices.append(filter_vertices)
-        
-    return chosen_vertices
+        unchosen_vertices.append(removed_vertices)
+        intersection_points.append(intsecpoints)
+        radiuses.append(radius)
+
+    return chosen_vertices, unchosen_vertices, intersection_points, radiuses
 
 def perpendicular_planes(point1, point2):
     # Get the direction vector of the line
@@ -713,49 +741,111 @@ vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=
 vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 5000, 1)
 
 # Calculate distance
-distance_threshold = 0.25
-new_splitted_lines, points_values = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
-<<<<<<< HEAD
-chosen_vertices = []
+distance_threshold = 0.1
+new_splitted_lines, points_values, splitted_branches = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
+ring_vertices, removed_vertices, intersection_points, radiuses = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
 
-np.savetxt('C:/Users/nguc4116/Desktop/vertices.txt', vmtk_boundary_vertices)
-np.savetxt('C:/Users/nguc4116/Desktop/smooth_points.txt', smooth_points)
+# ranges = [[25, 30], [40, 45], [55, 60], [70, 75], [100, 105], [120, 125], [140, 145]]
 
-with open('C:/Users/nguc4116/Desktop/new_splitted_lines.json', 'w') as json_file:
-    json.dump(new_splitted_lines, json_file)
+# # visualized_boundary_points = []
+# # visualized_removed_points = []
 
-ranges = [[10, 20], [45, 55]]
-for itrval in ranges:
-    for line in new_splitted_lines[itrval[0]:itrval[1]]:
-        point1, point2 = smooth_points[line[0]], smooth_points[line[-1]]
-        plane1_normal, plane2_normal = perpendicular_planes(point1, point2)
-
-        d1 = plane1_normal[3]
-        d2 = plane2_normal[3]
-
-        cur = d1
-        if d1 > d2:
-            d1 = d2
-            d2 = cur
-        
-        for idx, vertex in enumerate(vmtk_boundary_vertices):
-            d3 =  -(plane1_normal[0]*vertex[0] + plane1_normal[1]*vertex[1] + plane1_normal[2]*vertex[2])
-            if d3 >= d1 and d3 <= d2:
-                chosen_vertices.append(idx)
-
-    # print("Equation of plane 1: {}x + {}y + {}z = {}".format(plane1_normal[0], plane1_normal[1], plane1_normal[2], plane1_normal[3]))
-    # print("Equation of plane 2: {}x + {}y + {}z = {}".format(plane2_normal[0], plane2_normal[1], plane2_normal[2], plane2_normal[3]))
-=======
-ring_vertices = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
->>>>>>> a6846a4156b07238daf2895fad49ffa88a5c04f7
-
-# Visualize centerline
+# # Visualize centerline
 line_traces = []
-visualized_boundary_points = generate_points(vmtk_boundary_vertices[chosen_vertices], 1)
-visualized_smooth_points = generate_points_values(smooth_points, 2, 'green', points_values)
-visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
 
-# for idx, line in enumerate(new_splitted_lines):
-#     line_traces.append(generate_lines(smooth_points[line], 2))
 
-show_figure(line_traces + [visualized_boundary_points, visualized_skeleton_points, visualized_smooth_points])
+    # for i in range(len(new_splitted_lines)):
+    #     if splitted_branches[i] != cur_branch:
+    #         cur_pos = 0
+    #         cur_branch = splitted_branches[i]
+        
+    #     if cur_pos == 0:
+    #         print("Branch ", cur_branch)
+
+    #     print(f"""At {cur_pos}: """, mean_distances[i]*2, ' mm')
+    #     cur_pos += distance_threshold
+
+cur_branch = splitted_branches[0]
+cur_pos = 0
+branches = [[]]
+
+for idx, ring in enumerate(ring_vertices):
+    interval_radius = radiuses[idx]
+
+    if len(interval_radius):
+        line_traces.append(generate_lines(np.array(interval_radius), 2))
+
+    if splitted_branches[idx] != cur_branch:
+        cur_pos = 0
+        cur_branch = splitted_branches[idx]
+        branches.append([])
+
+    if cur_pos == 0:
+        print("Branch ", cur_branch)
+    
+    if len(interval_radius):
+        print(f"""At {cur_pos}: """, euclidean_distance(interval_radius[0], interval_radius[1]), ' mm')
+        branches[-1].append(euclidean_distance(interval_radius[0], interval_radius[1]))
+
+    cur_pos += distance_threshold
+
+
+for idx, branch in enumerate(branches):
+    np_branch = np.array(branch)
+
+    percentile_25 = np.percentile(np_branch, 25)
+    percentile_50 = np.percentile(np_branch, 50)
+    percentile_75 = np.percentile(np_branch, 75)
+    selected_range = np_branch[(np_branch >= percentile_25) & (np_branch <= percentile_75)]
+
+    print('Branch ', idx, ': ')
+    print("0th: ", np.min(np_branch))
+    print("25th: ", percentile_25)
+    print("50th: ", percentile_50)
+    print("75th: ", percentile_75)
+    print("100th: ", np.max(np_branch))
+    print("Distance at half of length: ", branch[int(len(branch)/2)])
+    print("Avg distance to centerline (range 25th-75th): ", np.mean(selected_range))
+    print("Avg distance to centerline (range 0th-100th): ", np.mean(np_branch))
+
+# # for interval in ranges:
+# #     visualized_boundary_points = []
+# #     visualized_removed_points = []
+# #     visualized_inter_points = []
+
+# #     interval_rings = ring_vertices[interval[0]:interval[1]]
+# #     interval_removed_rings = removed_vertices[interval[0]:interval[1]]
+# #     interval_radiuses = radiuses[interval[0]:interval[1]]
+
+# #     # for ring in interval_rings:
+# #     #     visualized_boundary_points.append(generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in ring]], 2, 'blue'))
+
+# #     # #     for vert in ring:
+# #     # #         print([vmtk_boundary_vertices[vert[0]], vert[1]])
+# #     # #         line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 2))
+
+# #     # for ring in interval_removed_rings:
+# #     #     if len(ring) > 0:
+# #     #         visualized_removed_points.append(generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in ring]], 2, 'orange'))
+# #     #         # visualized_inter_points.append(generate_points(np.array([sublist[2] for sublist in ring]), 2, 'red'))
+
+# #     #         # for vert in ring:
+# #     #         #     line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 2))
+    
+# #     for radius in interval_radiuses:
+# #         line_traces.append(generate_lines(np.array(radius), 2))
+
+# #     # show_figure(line_traces + visualized_removed_points + visualized_boundary_points)
+
+
+# # for idx, line in enumerate(new_splitted_lines):
+# #     line_traces.append(generate_lines(smooth_points[line], 2))
+# visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
+# visualized_smooth_points = generate_points_values(smooth_points, 1, 'green', points_values)
+# visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
+
+# # print(line_traces)
+# # print(visualized_boundary_points)
+# # print(visualized_smooth_points)
+
+# show_figure(line_traces + [visualized_boundary_points, visualized_smooth_points])
