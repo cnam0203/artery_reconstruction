@@ -674,6 +674,12 @@ distance_threshold = 0.25
 new_splitted_lines, points_values = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
 chosen_vertices = []
 
+np.savetxt('C:/Users/nguc4116/Desktop/vertices.txt', vmtk_boundary_vertices)
+np.savetxt('C:/Users/nguc4116/Desktop/smooth_points.txt', smooth_points)
+
+with open('C:/Users/nguc4116/Desktop/new_splitted_lines.json', 'w') as json_file:
+    json.dump(new_splitted_lines, json_file)
+
 ranges = [[10, 20], [45, 55]]
 for itrval in ranges:
     for line in new_splitted_lines[itrval[0]:itrval[1]]:
