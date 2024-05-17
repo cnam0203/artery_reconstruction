@@ -34,10 +34,10 @@ def visualize_slice(intensity_slice, segment_slice, fixed_slice, split_points, s
         
     axs.axis('off')  # Hide axes
     axs.set_title(f"{axis_name} - {start_point + index}")
-    # plt.show()
-    plt.show(block=False)
-    plt.pause(0.5)
-    plt.close()
+    plt.show()
+    # plt.show(block=False)
+    # plt.pause(0.5)
+    # plt.close()
 
     return
 

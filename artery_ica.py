@@ -187,8 +187,8 @@ def find_touchpoints(mask_data, center_points, distance_threshold=20):
     fig = go.Figure(data=[point_trace], layout=layout)
     fig.show()
     
-    print('Number extension loops: ', loop)
-    print('Number kissing points:', touch_points.shape[0])
+    # print('Number extension loops: ', loop)
+    # print('Number kissing points:', touch_points.shape[0])
 
     return touch_points
 

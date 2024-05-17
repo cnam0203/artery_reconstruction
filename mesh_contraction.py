@@ -869,63 +869,62 @@ while True:
 vertices = np.array(vertices)
 faces = np.array(faces)
 
-new_splitted_line = []
-point_clusters = {}
+# new_splitted_line = []
+# point_clusters = {}
 
-for line in smooth_connected_lines:
-    line_points = points[line]
+# for line in smooth_connected_lines:
+#     line_points = points[line]
 
-    total_length = 0
-    point_indexes = []
+#     total_length = 0
+#     point_indexes = []
 
-    for i in range(len(line_points) - 1):
-        cur_length = euclidean_distance(line_points[i], line_points[i+1])
-        total_length += cur_length
+#     for i in range(len(line_points) - 1):
+#         cur_length = euclidean_distance(line_points[i], line_points[i+1])
+#         total_length += cur_length
 
-        if (total_length > 2) or (i == len(line_points) - 2):
-            point_indexes.append(line[i])
-            point_indexes.append(line[i+1])
+#         if (total_length > 2) or (i == len(line_points) - 2):
+#             point_indexes.append(line[i])
+#             point_indexes.append(line[i+1])
 
-            point_clusters[line[i]] = len(new_splitted_line)
-            point_clusters[line[i+1]] = len(new_splitted_line)
+#             point_clusters[line[i]] = len(new_splitted_line)
+#             point_clusters[line[i+1]] = len(new_splitted_line)
 
-            new_splitted_line.append(point_indexes)
-            total_length = 0
-            point_indexes = []
-        else:
-            point_clusters[line[i]] = len(new_splitted_line)
-            point_indexes.append(line[i])
+#             new_splitted_line.append(point_indexes)
+#             total_length = 0
+#             point_indexes = []
+#         else:
+#             point_clusters[line[i]] = len(new_splitted_line)
+#             point_indexes.append(line[i])
             
 
-colors = []
-for _ in range(len(new_splitted_line)):
-    # Generate random RGB values
-    color = [random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)]
-    colors.append(color)
+# colors = []
+# for _ in range(len(new_splitted_line)):
+#     # Generate random RGB values
+#     color = [random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)]
+#     colors.append(color)
 
 
-mesh_copy = tm.Trimesh(vertices=vertices, faces=faces, enable_post_processing=True, solid=True)
-mesh_sub = sk.pre.contract(mesh_copy, epsilon=0.07)
-mesh_sub = sk.pre.fix_mesh(mesh_sub, remove_disconnected=5, inplace=False)
+# mesh_copy = tm.Trimesh(vertices=vertices, faces=faces, enable_post_processing=True, solid=True)
+# mesh_sub = sk.pre.contract(mesh_copy, epsilon=0.07)
+# mesh_sub = sk.pre.fix_mesh(mesh_sub, remove_disconnected=5, inplace=False)
 
-# skeleton_points_1 = skeleton_points_1
-skeleton_points_2 = mesh_sub.vertices
+# # skeleton_points_1 = skeleton_points_1
+# skeleton_points_2 = mesh_sub.vertices
 
-tree = KDTree(points)
-distances, indices = tree.query(vertices, k=1)
+# tree = KDTree(points)
+# distances, indices = tree.query(vertices, k=1)
 
-vertices_colors = []
-for index, vertex in enumerate(vertices):
-    if indices[index] in point_clusters:
-        color = colors[point_clusters[indices[index]]]
-    else:
-        color = [0, 0, 0]
+# vertices_colors = []
+# for index, vertex in enumerate(vertices):
+#     if indices[index] in point_clusters:
+#         color = colors[point_clusters[indices[index]]]
+#     else:
+#         color = [0, 0, 0]
 
-    vertices_colors.append(color)
+#     vertices_colors.append(color)
 
 
-vertex_normals = mesh_copy.vertex_normals
-print(vertex_normals)
+# vertex_normals = mesh_copy.vertex_normals
 # # # Find connection
 # # tree = KDTree(skeleton_points)
 # # distances, indices = tree.query(points, k=3)
@@ -1038,8 +1037,8 @@ print(vertex_normals)
 # #             else:
 # #                 smooth_connected_lines[index].append(new_index)
 
-# # # tree = KDTree(vmtk_vertices)
-# # # distances, indices = tree.query(vertices, k=1)
+tree = KDTree(vmtk_vertices)
+distances, indices = tree.query(vertices, k=1)
 # # # diameter = np.mean(distances)
 # # # print("Avg distance to centerline (all): ", diameter)
 
@@ -1071,46 +1070,46 @@ print(vertex_normals)
 # # #         ] 
 # # # )
 
-# # # colorscale = [
-# # #     [0.0, 'rgb(0, 0, 128)'],    # Dark Blue
-# # #     [0.2, 'rgb(0, 0, 255)'],    # Blue
-# # #     [0.4, 'rgb(0, 128, 0)'],    # Green
-# # #     [0.6, 'rgb(255, 255, 0)'],  # Yellow
-# # #     [0.8, 'rgb(255, 0, 0)'],    # Red
-# # #     [1.0, 'rgb(128, 0, 0)']     # Dark Red
-# # # ]
+colorscale = [
+    [0.0, 'rgb(0, 0, 128)'],    # Dark Blue
+    [0.2, 'rgb(0, 0, 255)'],    # Blue
+    [0.4, 'rgb(0, 128, 0)'],    # Green
+    [0.6, 'rgb(255, 255, 0)'],  # Yellow
+    [0.8, 'rgb(255, 0, 0)'],    # Red
+    [1.0, 'rgb(128, 0, 0)']     # Dark Red
+]
 
 
-# # # mesh = go.Mesh3d(
-# # #     x=vertices[:, 0],
-# # #     y=vertices[:, 1],
-# # #     z=vertices[:, 2],
-# # #     i=faces[:, 0],
-# # #     j=faces[:, 1],
-# # #     k=faces[:, 2],
-# # #     intensity=distances,
-# # #     colorscale='hot',
-# # #     # intensity=distances,
-# # #     # colorscale='plasma',
-# # #     colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
-# # #     hoverinfo='text',
-# # #     text=distances
-# # # )
+mesh = go.Mesh3d(
+    x=vertices[:, 0],
+    y=vertices[:, 1],
+    z=vertices[:, 2],
+    i=faces[:, 0],
+    j=faces[:, 1],
+    k=faces[:, 2],
+    intensity=distances,
+    colorscale='hot',
+    # intensity=distances,
+    # colorscale='plasma',
+    colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
+    hoverinfo='text',
+    text=distances
+)
 
-# # # # Create the figure
-# # # fig = go.Figure(data=[mesh])
+# Create the figure
+fig = go.Figure(data=[mesh])
 
-# # # # Update layout
-# # # fig.update_layout(scene=dict(
-# # #                     xaxis_title='X',
-# # #                     yaxis_title='Y',
-# # #                     zaxis_title='Z',
-# # #                     ),
-# # #                     title='Mesh Surface Color Map'
-# # #                 )
+# Update layout
+fig.update_layout(scene=dict(
+                    xaxis_title='X',
+                    yaxis_title='Y',
+                    zaxis_title='Z',
+                    ),
+                    title='Mesh Surface Color Map'
+                )
 
-# # # # Show the plot
-# # # fig.show()
+# Show the plot
+fig.show()
 
 # # # # Calculate histogram
 # # # hist, bins = np.histogram(distances, bins=np.arange(min(distances), max(distances) + 2))
@@ -1124,26 +1123,26 @@ print(vertex_normals)
 # # # plt.show()
 
 
-# Create a trace for the cone
-vertex_normals = -1*vertex_normals
-cone_trace = go.Cone(
-        x=vertices[:, 0],
-        y=vertices[:, 1],
-        z=vertices[:, 2],
-        u=vertex_normals[:, 0],
-        v=vertex_normals[:, 1],
-        w=vertex_normals[:, 2],
-        sizeref=2,
-        name='Vectors'
-)
+# # Create a trace for the cone
+# vertex_normals = -1*vertex_normals
+# cone_trace = go.Cone(
+#         x=vertices[:, 0],
+#         y=vertices[:, 1],
+#         z=vertices[:, 2],
+#         u=vertex_normals[:, 0],
+#         v=vertex_normals[:, 1],
+#         w=vertex_normals[:, 2],
+#         sizeref=2,
+#         name='Vectors'
+# )
 
 
-visualized_boundary_points = generate_points(vertices, 1, vertices_colors)
-visualized_skeleton_points = generate_points(skeleton_points_2, 1)
-show_figure([
-            visualized_skeleton_points,
-            # visualized_vmtk_points,
-            visualized_boundary_points,
-            cone_trace
-        ] + line_traces
-)
+# visualized_boundary_points = generate_points(vertices, 1, vertices_colors)
+# visualized_skeleton_points = generate_points(skeleton_points_2, 1)
+# show_figure([
+#             visualized_skeleton_points,
+#             # visualized_vmtk_points,
+#             visualized_boundary_points,
+#             cone_trace
+#         ] + line_traces
+# )

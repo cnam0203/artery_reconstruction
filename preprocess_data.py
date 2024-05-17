@@ -222,5 +222,5 @@ def preprocess_data(
     surf_data[surf_data >= intensity_threshold_2] = 1
     surf_data = remove_noisy_voxels(surf_data, neighbor_threshold_1, neighbor_threshold_2)
     surf_data = remove_noisy_regions(surf_data)
-
+    
     return mask_data, cex_data, surf_data

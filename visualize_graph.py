@@ -13,6 +13,9 @@ def show_figure(data):
     layout = go.Layout(
         scene=dict(
             aspectmode='manual',
+            xaxis = dict(visible=False),
+            yaxis = dict(visible=False),
+            zaxis =dict(visible=False)
             # camera=dict(
             #     eye=dict(x=1, y=1, z=1)
             # ),
@@ -24,7 +27,7 @@ def show_figure(data):
 
     fig = go.Figure(data=data, layout=layout)
     # fig.update_layout(showlegend=False)
-    fig.update_layout(autosize=False, width=2000, height=1500 )
+    fig.update_layout(autosize=False, width=2000, height=1500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', )
     fig.show()
 
 
@@ -59,6 +62,20 @@ def generate_points(points, point_size=2, point_color='black'):
         name='Points',
         text=[f'Pos {i}' for i in range(points.shape[0])]
     )
+
+def generate_mesh(vertices, faces):
+    mesh = go.Mesh3d(
+        x=vertices[:, 0],
+        y=vertices[:, 1],
+        z=vertices[:, 2],
+        i=faces[:, 0],
+        j=faces[:, 1],
+        k=faces[:, 2],
+        opacity=0.3,
+        color='#50ad61'
+    )
+
+    return mesh
 
 def generate_points_values(points, point_size=2, point_color='black', point_values=[]):
     """

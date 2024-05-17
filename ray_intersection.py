@@ -221,15 +221,21 @@ def select_faces_with_chosen_vertices(vertices, faces, chosen_vertices, loop=2):
         
         # Iterate over each face
         list_vertices = []
+        selected_faces = []
 
         for face in faces:
             # Check if any vertex index in the face is in the chosen set
             if any(vertex_index in chosen_set for vertex_index in face):
-                selected_face = vertices[face]
-                selected_faces.append(selected_face)
+                selected_faces.append(face)
+                
+                for vertex_index in face:
+                    list_vertices.append(vertex_index)
 
-            for vertex_index in face:
-                list_vertices.append(vertex_index)
+                # Convert inner lists to tuples
+                tuple_list = [tuple(sublist.tolist()) for sublist in selected_faces]
+                unique_tuples = set(tuple_list)
+                selected_faces = [np.array(t) for t in unique_tuples]
 
+    selected_faces = vertices[selected_faces]
     return np.array(selected_faces)
 
