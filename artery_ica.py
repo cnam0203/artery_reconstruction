@@ -1,8 +1,8 @@
 import nibabel as nib
 from skimage import measure
-import open3d as o3d
+# import open3d as o3d
 import numpy as np
-import plotly.graph_objs as go
+# import plotly.graph_objs as go
 from skimage.morphology import skeletonize, thin
 from scipy.spatial import KDTree
 from scipy.spatial import distance_matrix
@@ -12,7 +12,7 @@ from scipy.ndimage import gaussian_filter
 from sklearn.cluster import DBSCAN
 from preprocess_data import *
 from process_graph import *
-from visualize_graph import *
+# from visualize_graph import *
 
 # Nearest neighbor algorithm
 def nearest_neighbor(points):
@@ -157,35 +157,35 @@ def find_touchpoints(mask_data, center_points, distance_threshold=20):
     artery_points = np.argwhere(artery_data != 0)
     artery_values = artery_data[artery_points[:, 0], artery_points[:, 1], artery_points[:, 2]]
 
-    point_trace = go.Scatter3d(
-        x=artery_points[:, 0],
-        y=artery_points[:, 1],
-        z=artery_points[:, 2],
-        mode='markers',
-        marker=dict(
-            symbol='circle',  # Set marker symbol to 'cube'
-            size=5,
-            color=artery_values,  # Color based on the values
-            colorscale='Viridis',  # Colormap
-        ),
-        text=[f'Value: {val}' for val in artery_values],
-        hoverinfo='text'
-    )
+    # point_trace = go.Scatter3d(
+    #     x=artery_points[:, 0],
+    #     y=artery_points[:, 1],
+    #     z=artery_points[:, 2],
+    #     mode='markers',
+    #     marker=dict(
+    #         symbol='circle',  # Set marker symbol to 'cube'
+    #         size=5,
+    #         color=artery_values,  # Color based on the values
+    #         colorscale='Viridis',  # Colormap
+    #     ),
+    #     text=[f'Value: {val}' for val in artery_values],
+    #     hoverinfo='text'
+    # )
 
-    # Create layout
-    layout = go.Layout(
-        scene=dict(
-            aspectmode='cube',
-            camera=dict(
-                eye=dict(x=1, y=1, z=1)
-            )
-        ),
-        height=800,  # Set height to 800 pixels
-        width=1200   # Set width to 1200 pixels
-    )
+    # # Create layout
+    # layout = go.Layout(
+    #     scene=dict(
+    #         aspectmode='cube',
+    #         camera=dict(
+    #             eye=dict(x=1, y=1, z=1)
+    #         )
+    #     ),
+    #     height=800,  # Set height to 800 pixels
+    #     width=1200   # Set width to 1200 pixels
+    # )
      
-    fig = go.Figure(data=[point_trace], layout=layout)
-    fig.show()
+    # fig = go.Figure(data=[point_trace], layout=layout)
+    # fig.show()
     
     # print('Number extension loops: ', loop)
     # print('Number kissing points:', touch_points.shape[0])

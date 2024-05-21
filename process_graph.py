@@ -2,7 +2,7 @@ import numpy as np
 import math
 import copy
 import heapq
-import plotly.graph_objs as go
+# import plotly.graph_objs as go
 from scipy.ndimage import convolve
 from skimage.draw import line_nd
 import skan
@@ -2320,35 +2320,35 @@ def find_touchpoints(mask_data, left_points, right_points, distance_threshold=1)
     artery_points = np.argwhere(artery_data != 0)
     artery_values = artery_data[artery_points[:, 0], artery_points[:, 1], artery_points[:, 2]]
 
-    point_trace = go.Scatter3d(
-        x=artery_points[:, 0],
-        y=artery_points[:, 1],
-        z=artery_points[:, 2],
-        mode='markers',
-        marker=dict(
-            symbol='circle',  # Set marker symbol to 'cube'
-            size=5,
-            color=artery_values,  # Color based on the values
-            colorscale='Viridis',  # Colormap
-        ),
-        text=[f'Value: {val}' for val in artery_values],
-        hoverinfo='text'
-    )
+    # point_trace = go.Scatter3d(
+    #     x=artery_points[:, 0],
+    #     y=artery_points[:, 1],
+    #     z=artery_points[:, 2],
+    #     mode='markers',
+    #     marker=dict(
+    #         symbol='circle',  # Set marker symbol to 'cube'
+    #         size=5,
+    #         color=artery_values,  # Color based on the values
+    #         colorscale='Viridis',  # Colormap
+    #     ),
+    #     text=[f'Value: {val}' for val in artery_values],
+    #     hoverinfo='text'
+    # )
 
-    # Create layout
-    layout = go.Layout(
-        scene=dict(
-            aspectmode='cube',
-            camera=dict(
-                eye=dict(x=1, y=1, z=1)
-            )
-        ),
-        height=800,  # Set height to 800 pixels
-        width=1200   # Set width to 1200 pixels
-    )
+    # # Create layout
+    # layout = go.Layout(
+    #     scene=dict(
+    #         aspectmode='cube',
+    #         camera=dict(
+    #             eye=dict(x=1, y=1, z=1)
+    #         )
+    #     ),
+    #     height=800,  # Set height to 800 pixels
+    #     width=1200   # Set width to 1200 pixels
+    # )
      
-    fig = go.Figure(data=[point_trace], layout=layout)
-    fig.show()
+    # fig = go.Figure(data=[point_trace], layout=layout)
+    # fig.show()
     
     print('Number extension loops: ', loop)
     print('Number kissing points:', touch_points.shape[0])

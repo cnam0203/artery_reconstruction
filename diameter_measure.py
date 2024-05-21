@@ -23,15 +23,15 @@ import random
 
 from preprocess_data import *
 from process_graph import *
-from visualize_graph import *
+# from visualize_graph import *
 from slice_selection import *
 from visualize_mesh import *
-from marcube import *
+# from marcube import *
 from artery_ica import *
 from ray_intersection import *
 
 
-import plotly.graph_objs as go
+# import plotly.graph_objs as go
 from skimage import morphology
 from scipy.ndimage import distance_transform_edt
 
@@ -469,7 +469,7 @@ def remove_short_branch(skeleton, skeleton_points, end_points, junction_points, 
     new_connected_lines = []
 
     for line in connected_lines:
-        if len(line) < 6 and ((line[0] in end_points) or (line[-1] in end_points)):
+        if len(line) < 7 and ((line[0] in end_points) or (line[-1] in end_points)):
             for point in line:
                 if point not in junction_points:
                     pos = skeleton_points[point].astype(int)
@@ -645,9 +645,6 @@ def find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices
                         radius = [vertex, intersection_point]
 
         surfaces = select_faces_with_chosen_vertices(vmtk_boundary_vertices, vmtk_boundary_faces, ring_vertices, 2)
-
-        # print('Number of surfaces: ', len(surfaces))
-        # print('Number of ring_vertices: ', len(ring_vertices))
         filter_vertices = []
         
 
@@ -694,18 +691,17 @@ def perpendicular_planes(point1, point2):
     return v1, v2
 
 # Initialize
-dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
-segment_file_path = dataset_dir + 'BCW-1205-RES.nii.gz'
-original_file_path = dataset_dir + 'BCW-1205-RES_0000.nii.gz'
-
+dataset_dir = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/'
+segment_file_path = dataset_dir + 'BCW-1222-RES.nii.gz'
+original_file_path = dataset_dir + 'BCW-1222-RES_0000.nii.gz'
+sub_num = 'BCW-1222-RES'
 # segment_file_path = dataset_dir + 'sub-581_run-1_mra_eICAB_CW.nii.gz'
 # original_file_path = dataset_dir + 'sub-581_run-1_mra_resampled.nii.gz'
-
-centerline_file_path = dataset_dir + 'sub-9_run-1_mra_CircleOfWillis_centerline.nii.gz'
+# centerline_file_path = dataset_dir + 'sub-9_run-1_mra_CircleOfWillis_centerline.nii.gz'
 
 segment_image = nib.load(segment_file_path)
 original_image = nib.load(original_file_path)
-centerline_image = nib.load(centerline_file_path)
+# centerline_image = nib.load(centerline_file_path)
 
 intensity_threshold_1 = 0.1
 intensity_threshold_2 = 0.1
@@ -718,292 +714,367 @@ resolution = 0.05
 
 original_data = original_image.get_fdata()
 segment_data = segment_image.get_fdata()
-centerline_data = centerline_image.get_fdata()
+# centerline_data = centerline_image.get_fdata()
 voxel_sizes = segment_image.header.get_zooms()
+info_dir = '/Users/apple/Desktop/neuroscience/artery_separate/info_files/' + sub_num + '/'
 
-## For treated kising vessels
-# processed_mask = segment_data
+for artery_index in [1, 2, 3, 5, 6, 7, 8]:
+    ## For treated kising vessels
+    # processed_mask = segment_data
 
-## For untreated kissing vessels
-# processed_mask = find_skeleton_ica(segment_image, original_image, 1 , 0.5, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
-# processed_mask = remove_noisy_voxels(processed_mask, neighbor_threshold_1, True)
+    ## For untreated kissing vessels
+    # processed_mask = find_skeleton_ica(segment_image, original_image, 1 , 0.5, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
+    # processed_mask = remove_noisy_voxels(processed_mask, neighbor_threshold_1, True)
 
-# For normal artery
-processed_mask, cf_mask, surf_data = preprocess_data(original_data, segment_data, [1], intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
-
-
-# Extract smooth centerline
-skeleton = skeletonize(processed_mask)
-skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
-skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines)
-# connected_lines, skeleton, skeleton_points = extend_skeleton(connected_lines, end_points, skeleton_points, original_data, processed_mask, skeleton, voxel_sizes)
-
-vertices, faces, normals, values = measure.marching_cubes(skeleton, level=0.1, spacing=voxel_sizes)
-skeleton_points = voxel_sizes*(skeleton_points+0.5)
-
-vmtk_skeleton_vertices, vmtk_skeleton_faces = vmtk_smooth_mesh(vertices, faces, 2000)
-smooth_points, smooth_connected_lines = smooth_centerline(vmtk_skeleton_vertices, skeleton_points, connected_lines)
-
-# Extract boundary
-vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
-vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 10, 1)
-
-# tree = KDTree(smooth_points)
-# distances, indices = tree.query(vmtk_boundary_vertices, k=1)
+    # For normal artery
+    processed_mask, cf_mask, surf_data = preprocess_data(original_data, segment_data, [artery_index], intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
 
 
-# mesh = go.Mesh3d(
-#     x=vmtk_boundary_vertices[:, 0],
-#     y=vmtk_boundary_vertices[:, 1],
-#     z=vmtk_boundary_vertices[:, 2],
-#     i=vmtk_boundary_faces[:, 0],
-#     j=vmtk_boundary_faces[:, 1],
-#     k=vmtk_boundary_faces[:, 2],
-#     intensity=distances,
-#     colorscale='hot',
-#     # intensity=distances,
-#     # colorscale='plasma',
-#     colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
-#     hoverinfo='text',
-#     text=distances
-# )
+    # Extract smooth centerline
+    skeleton = skeletonize(processed_mask)
+    skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
+    skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines)
+    # connected_lines, skeleton, skeleton_points = extend_skeleton(connected_lines, end_points, skeleton_points, original_data, processed_mask, skeleton, voxel_sizes)
 
-# # Create the figure
-# fig = go.Figure(data=[mesh])
+    vertices, faces, normals, values = measure.marching_cubes(skeleton, level=0.1, spacing=voxel_sizes)
+    skeleton_points = voxel_sizes*(skeleton_points+0.5)
 
-# # Update layout
-# fig.update_layout(scene=dict(
-#                     aspectmode='manual',
-#                     xaxis = dict(visible=False),
-#                     yaxis = dict(visible=False),
-#                     zaxis =dict(visible=False)
-#                     ),
-#                     title='Mesh Surface Color Map'
-#                 )
+    vmtk_skeleton_vertices, vmtk_skeleton_faces = vmtk_smooth_mesh(vertices, faces, 2000)
+    smooth_points, smooth_connected_lines = smooth_centerline(vmtk_skeleton_vertices, skeleton_points, connected_lines)
 
-# # Show the plot
-# fig.show()
+    # Extract boundary
+    vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
+    vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 10, 1)
 
+    np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
+    np.savetxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')
+    np.savetxt(info_dir + f'vmtk_boundary_faces_{artery_index}.txt', vmtk_boundary_faces, delimiter=',', fmt='%.2f')
+    with open(info_dir + f'smooth_connected_lines_{artery_index}.json', 'w') as file:
+        json.dump(smooth_connected_lines, file)  # indent=4 makes the file more readable
 
-visualized_smooth_points = []
-visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
-for line in smooth_connected_lines:
-    visualized_smooth_points.append(generate_points(smooth_points[line], 2))
+# # Calculate distance
+# distance_threshold = 0.5
+# new_splitted_lines, points_values, splitted_branches = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
+# ring_vertices, removed_vertices, intersection_points, radiuses, all_surfaces = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
 
-# # visualized_start_points = []
-# # visualized_end_points = []
+# cur_branch = splitted_branches[0]
+# cur_pos = 0
+# branches = [[]]
+# line_traces = []
 
-# # # for line in smooth_connected_lines:
-# # #     visualized_start_points.append(generate_points(smooth_points[line[0:1]], 5, 'red'))
-# # #     visualized_end_points.append(generate_points(smooth_points[line[-1:]], 5, 'green'))
+# for idx, ring in enumerate(ring_vertices):
+#     interval_radius = radiuses[idx]
 
-# Calculate distance
-distance_threshold = 0.5
-new_splitted_lines, points_values, splitted_branches = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
-ring_vertices, removed_vertices, intersection_points, radiuses, all_surfaces = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
+#     # if len(interval_radius):
+#     #     line_traces.append(generate_lines(np.array(interval_radius), 2))
 
-unique_vertices = {}
+#     if splitted_branches[idx] != cur_branch:
+#         cur_pos = 0
+#         cur_branch = splitted_branches[idx]
+#         branches.append([])
 
-for ring_vertice in ring_vertices:
-    for point in ring_vertice:
-        if point[0] not in unique_vertices:
-            unique_vertices[point[0]] = point[1]
-        else:
-            distance_1 = euclidean_distance(vmtk_boundary_vertices[point[0]], unique_vertices[point[0]])
-            distance_2 = euclidean_distance(vmtk_boundary_vertices[point[0]], point[1])
-
-            if distance_2 < distance_1:
-                unique_vertices[point[0]] = point[1]
-
-
-not_exist_vertices = []
-for i in range(vmtk_boundary_vertices.shape[0]):
-    if i not in unique_vertices:
-        not_exist_vertices.append(i)
-
-exist_vertices = [index for index in unique_vertices]
-
-tree = KDTree(vmtk_boundary_vertices[exist_vertices])
-distances, indices = tree.query(vmtk_boundary_vertices[not_exist_vertices], k=1)
-
-for idx, index in enumerate(indices):
-    unique_vertices[not_exist_vertices[idx]] = unique_vertices[exist_vertices[index]]
-
-distances = []
-
-for i in range(vmtk_boundary_vertices.shape[0]):
-    mean_distance = euclidean_distance(vmtk_boundary_vertices[i], unique_vertices[i])
-    distances.append(mean_distance)
-
-
-mesh = go.Mesh3d(
-    x=vmtk_boundary_vertices[:, 0],
-    y=vmtk_boundary_vertices[:, 1],
-    z=vmtk_boundary_vertices[:, 2],
-    i=vmtk_boundary_faces[:, 0],
-    j=vmtk_boundary_faces[:, 1],
-    k=vmtk_boundary_faces[:, 2],
-    intensity=distances,
-    colorscale='hot',
-    # intensity=distances,
-    # colorscale='plasma',
-    colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
-    hoverinfo='text',
-    text=distances
-)
-
-# Create the figure
-fig = go.Figure(data=[mesh])
-
-# Update layout
-fig.update_layout(scene=dict(
-                    aspectmode='manual',
-                    xaxis = dict(visible=False),
-                    yaxis = dict(visible=False),
-                    zaxis =dict(visible=False)
-                    ),
-                    title='Mesh Surface Color Map'
-                )
-
-# Show the plot
-fig.show()
-# # # ranges = [[10, 15], [30, 35], [40, 45], [50, 55]]
-
-# # # # # visualized_boundary_points = []
-# # # # # visualized_removed_points = []
-
-# # # # # Visualize centerline
-# # line_traces = []
-# # meshes = []
-# # meshes = generate_mesh(vmtk_boundary_vertices, vmtk_boundary_faces)
-
-# # for line in connected_lines:
-# #     line_traces.append(generate_lines(skeleton_points[line], 5, 'red'))
-
-# # # for group_surfaces in interval_surfaces:
-
-# # # cur_branch = splitted_branches[0]
-# # # cur_pos = 0
-# # # branches = [[]]
-
-# # # for idx, ring in enumerate(ring_vertices):
-# # #     interval_radius = radiuses[idx]
-
-# # #     if len(interval_radius):
-# # #         line_traces.append(generate_lines(np.array(interval_radius), 2))
-
-# # #     if splitted_branches[idx] != cur_branch:
-# # #         cur_pos = 0
-# # #         cur_branch = splitted_branches[idx]
-# # #         branches.append([])
-
-# # #     if cur_pos == 0:
-# # #         print("Branch ", cur_branch)
+#     if cur_pos == 0:
+#         print("Branch ", cur_branch)
     
-# # #     if len(interval_radius):
-# # #         print(f"""At {cur_pos}: """, euclidean_distance(interval_radius[0], interval_radius[1]), ' mm')
-# # #         branches[-1].append(euclidean_distance(interval_radius[0], interval_radius[1]))
+#     if len(interval_radius):
+#         print(f"""At {cur_pos}: """, euclidean_distance(interval_radius[0], interval_radius[1]), ' mm')
+#         branches[-1].append(euclidean_distance(interval_radius[0], interval_radius[1]))
 
-# # #     cur_pos += distance_threshold
+#     cur_pos += distance_threshold
+
+# longest_branch = None
+# longest_length = 0
+# for idx, branch in enumerate(branches):
+#     np_branch = np.array(branch)
+
+#     if len(branch) > longest_length:
+#         longest_length = len(branch)
+#         longest_branch = idx
+
+#     percentile_25 = np.percentile(np_branch, 25)
+#     percentile_45 = np.percentile(np_branch, 45)
+#     percentile_50 = np.percentile(np_branch, 50)
+#     percentile_55 = np.percentile(np_branch, 55)
+#     percentile_75 = np.percentile(np_branch, 75)
+#     selected_range = np_branch[(np_branch >= percentile_25) & (np_branch <= percentile_75)]
+
+#     # print('Branch ', idx, ':')
+#     # print("0th: ", np.min(np_branch))
+#     # print("25th: ", percentile_25)
+#     # print("45th: ", percentile_45)
+#     # print("50th: ", percentile_50)
+#     # print("55th: ", percentile_55)
+#     # print("75th: ", percentile_75)
+#     # print("100th: ", np.max(np_branch))
+#     print("Min radius at half the length: ", branch[int(len(branch)/2)])
+#     # print("Avg min radius (range 25th-75th): ", np.mean(selected_range))
+#     # print("Avg min radius (range 0th-100th): ", np.mean(np_branch))
+
+# max_branch_pos = [idx for idx, value in enumerate(splitted_branches) if value == longest_branch]
+# ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if idx in max_branch_pos]
+# middle_ring = ring_vertices[int(len(ring_vertices)/2)]
+
+# middle_surface_points = vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]]
+# middle_intersection_points = intersection_points[int(len(intersection_points)/2)]
+
+# sum_distance = []
+# for idx, point in enumerate(middle_surface_points):
+#     sum_distance.append(euclidean_distance(point, middle_intersection_points[idx]))
+
+# mean_radius = sum(sum_distance)/len(sum_distance)
+# print("Average radius at half the length: ", mean_radius)
+
+# # tree = KDTree(smooth_points)
+# # distances, indices = tree.query(vmtk_boundary_vertices, k=1)
+
+# # mesh = go.Mesh3d(
+# #     x=vmtk_boundary_vertices[:, 0],
+# #     y=vmtk_boundary_vertices[:, 1],
+# #     z=vmtk_boundary_vertices[:, 2],
+# #     i=vmtk_boundary_faces[:, 0],
+# #     j=vmtk_boundary_faces[:, 1],
+# #     k=vmtk_boundary_faces[:, 2],
+# #     intensity=distances,
+# #     colorscale='hot',
+# #     # intensity=distances,
+# #     # colorscale='plasma',
+# #     colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
+# #     hoverinfo='text',
+# #     text=distances
+# # )
+
+# # # Create the figure
+# # fig = go.Figure(data=[mesh])
+
+# # # Update layout
+# # fig.update_layout(scene=dict(
+# #                     aspectmode='manual',
+# #                     xaxis = dict(visible=False),
+# #                     yaxis = dict(visible=False),
+# #                     zaxis =dict(visible=False)
+# #                     ),
+# #                     title='Mesh Surface Color Map'
+# #                 )
+
+# # # Show the plot
+# # fig.show()
 
 
-# # # longest_branch = None
-# # # longest_length = 0
-# # # for idx, branch in enumerate(branches):
-# # #     np_branch = np.array(branch)
+# # visualized_smooth_points = []
+# # visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
+# # for line in smooth_connected_lines:
+# #     visualized_smooth_points.append(generate_points(smooth_points[line], 2))
 
-# # #     if len(branch) > longest_length:
-# # #         longest_length = len(branch)
-# # #         longest_branch = idx
+# # # visualized_start_points = []
+# # # visualized_end_points = []
 
-# # #     percentile_25 = np.percentile(np_branch, 25)
-# # #     percentile_45 = np.percentile(np_branch, 45)
-# # #     percentile_50 = np.percentile(np_branch, 50)
-# # #     percentile_55 = np.percentile(np_branch, 55)
-# # #     percentile_75 = np.percentile(np_branch, 75)
-# # #     selected_range = np_branch[(np_branch >= percentile_25) & (np_branch <= percentile_75)]
-
-# # #     print('Branch ', idx, ':')
-# # #     print("0th: ", np.min(np_branch))
-# # #     print("25th: ", percentile_25)
-# # #     print("45th: ", percentile_45)
-# # #     print("50th: ", percentile_50)
-# # #     print("55th: ", percentile_55)
-# # #     print("75th: ", percentile_75)
-# # #     print("100th: ", np.max(np_branch))
-# # #     print("Min radius at half the length: ", branch[int(len(branch)/2)])
-# # #     print("Avg min radius (range 25th-75th): ", np.mean(selected_range))
-# # #     print("Avg min radius (range 0th-100th): ", np.mean(np_branch))
+# # # # for line in smooth_connected_lines:
+# # # #     visualized_start_points.append(generate_points(smooth_points[line[0:1]], 5, 'red'))
+# # # #     visualized_end_points.append(generate_points(smooth_points[line[-1:]], 5, 'green'))
 
 
-# # # max_branch_pos = [idx for idx, value in enumerate(splitted_branches) if value == longest_branch]
-# # # ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if idx in max_branch_pos]
-# # # middle_ring = ring_vertices[int(len(ring_vertices)/2)]
+# # unique_vertices = {}
 
-# # # middle_surface_points = vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]]
-# # # middle_intersection_points = intersection_points[int(len(intersection_points)/2)]
+# # for ring_vertice in ring_vertices:
+# #     for point in ring_vertice:
+# #         if point[0] not in unique_vertices:
+# #             unique_vertices[point[0]] = point[1]
+# #         else:
+# #             distance_1 = euclidean_distance(vmtk_boundary_vertices[point[0]], unique_vertices[point[0]])
+# #             distance_2 = euclidean_distance(vmtk_boundary_vertices[point[0]], point[1])
 
-# # # sum_distance = []
-# # # for idx, point in enumerate(middle_surface_points):
-# # #     sum_distance.append(euclidean_distance(point, middle_intersection_points[idx]))
+# #             if distance_2 < distance_1:
+# #                 unique_vertices[point[0]] = point[1]
 
-# # # mean_radius = sum(sum_distance)/len(sum_distance)
-# # # print("Average radius at half the length: ", mean_radius)
 
-# # visualized_ring_points = []
-# # # visualized_ring_points = generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]], 3, 'red')
+# # not_exist_vertices = []
+# # for i in range(vmtk_boundary_vertices.shape[0]):
+# #     if i not in unique_vertices:
+# #         not_exist_vertices.append(i)
 
-# # # # for interval in ranges:
-# # # #     line_traces = []
-# # # #     visualized_boundary_points = []
-# # # #     visualized_removed_points = []
-# # # #     visualized_inter_points = []
+# # exist_vertices = [index for index in unique_vertices]
 
-# # # #     interval_rings = ring_vertices[interval[0]:interval[1]]
-# # # #     interval_removed_rings = removed_vertices[interval[0]:interval[1]]
-# # # #     interval_radiuses = radiuses[interval[0]:interval[1]]
-# # # #     interval_surfaces = all_surfaces[interval[0]:interval[1]]
+# # tree = KDTree(vmtk_boundary_vertices[exist_vertices])
+# # distances, indices = tree.query(vmtk_boundary_vertices[not_exist_vertices], k=1)
 
-# # # #     for ring in interval_rings:
-# # # #         visualized_boundary_points.append(generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in ring]], 3, 'blue'))
+# # for idx, index in enumerate(indices):
+# #     unique_vertices[not_exist_vertices[idx]] = unique_vertices[exist_vertices[index]]
 
-# # # #         # for vert in ring:
-# # # #         #     if euclidean_distance(vmtk_boundary_vertices[vert[0]], vert[1]) > 3:
-# # # #         #         line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 1, 'red'))
+# # distances = []
 
-# # # #     for ring in interval_removed_rings:
-# # # #         if len(ring) > 0:
-# # # #             visualized_removed_points.append(generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in ring]], 3, 'orange'))
-# # # #             # visualized_inter_points.append(generate_points(np.array([sublist[2] for sublist in ring]), 3, 'red'))
+# # for i in range(vmtk_boundary_vertices.shape[0]):
+# #     mean_distance = euclidean_distance(vmtk_boundary_vertices[i], unique_vertices[i])
+# #     distances.append(mean_distance)
 
-# # # #             # for vert in ring:
-# # # #             #     if euclidean_distance(vmtk_boundary_vertices[vert[0]], vert[1]) > 3:
-# # # #             #         line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 1, 'red'))
-# # # #             # for vert in ring:
-# # # #             #     line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 1))
+
+# # mesh = go.Mesh3d(
+# #     x=vmtk_boundary_vertices[:, 0],
+# #     y=vmtk_boundary_vertices[:, 1],
+# #     z=vmtk_boundary_vertices[:, 2],
+# #     i=vmtk_boundary_faces[:, 0],
+# #     j=vmtk_boundary_faces[:, 1],
+# #     k=vmtk_boundary_faces[:, 2],
+# #     intensity=distances,
+# #     colorscale='hot',
+# #     # intensity=distances,
+# #     # colorscale='plasma',
+# #     colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
+# #     hoverinfo='text',
+# #     text=distances
+# # )
+
+# # # Create the figure
+# # fig = go.Figure(data=[mesh])
+
+# # # Update layout
+# # fig.update_layout(scene=dict(
+# #                     aspectmode='manual',
+# #                     xaxis = dict(visible=False),
+# #                     yaxis = dict(visible=False),
+# #                     zaxis =dict(visible=False)
+# #                     ),
+# #                     title='Mesh Surface Color Map'
+# #                 )
+
+# # # Show the plot
+# # fig.show()
+# # # # # ranges = [[10, 15], [30, 35], [40, 45], [50, 55]]
+
+# # # # # # # visualized_boundary_points = []
+# # # # # # # visualized_removed_points = []
+
+# # # # # # # Visualize centerline
+# # # # line_traces = []
+# # # # meshes = []
+# # # # meshes = generate_mesh(vmtk_boundary_vertices, vmtk_boundary_faces)
+
+# # # # for line in connected_lines:
+# # # #     line_traces.append(generate_lines(skeleton_points[line], 5, 'red'))
+
+# # # # # for group_surfaces in interval_surfaces:
+
+# # # # # cur_branch = splitted_branches[0]
+# # # # # cur_pos = 0
+# # # # # branches = [[]]
+
+# # # # # for idx, ring in enumerate(ring_vertices):
+# # # # #     interval_radius = radiuses[idx]
+
+# # # # #     if len(interval_radius):
+# # # # #         line_traces.append(generate_lines(np.array(interval_radius), 2))
+
+# # # # #     if splitted_branches[idx] != cur_branch:
+# # # # #         cur_pos = 0
+# # # # #         cur_branch = splitted_branches[idx]
+# # # # #         branches.append([])
+
+# # # # #     if cur_pos == 0:
+# # # # #         print("Branch ", cur_branch)
     
-# # # #     # for radius in interval_radiuses:
-# # # #     #     line_traces.append(generate_lines(np.array(radius), 2))
+# # # # #     if len(interval_radius):
+# # # # #         print(f"""At {cur_pos}: """, euclidean_distance(interval_radius[0], interval_radius[1]), ' mm')
+# # # # #         branches[-1].append(euclidean_distance(interval_radius[0], interval_radius[1]))
 
-# # # #     # for group_surfaces in interval_surfaces:
-# # # #     #     for surface in group_surfaces:
-# # # #     #         line_traces.append(generate_lines(np.array([surface[0], surface[1]]), 2))
-# # # #     #         line_traces.append(generate_lines(np.array([surface[1], surface[2]]), 2))
-# # # #     #         line_traces.append(generate_lines(np.array([surface[0], surface[2]]), 2))
-
-# # # #     show_figure(line_traces + visualized_boundary_points + visualized_removed_points + visualized_inter_points)
+# # # # #     cur_pos += distance_threshold
 
 
-# # # # # # for idx, line in enumerate(new_splitted_lines):
-# # # # # #     line_traces.append(generate_lines(smooth_points[line], 2))
-# # # # # visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
-# # # # # visualized_smooth_points = generate_points_values(smooth_points, 1, 'green', points_values)
-# # # # # visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
+# # # # # longest_branch = None
+# # # # # longest_length = 0
+# # # # # for idx, branch in enumerate(branches):
+# # # # #     np_branch = np.array(branch)
 
-# # # # # # print(line_traces)
-# # # # # # print(visualized_boundary_points)
-# # # # # # print(visualized_smooth_points)
+# # # # #     if len(branch) > longest_length:
+# # # # #         longest_length = len(branch)
+# # # # #         longest_branch = idx
 
-show_figure([visualized_boundary_points] +  visualized_smooth_points)
+# # # # #     percentile_25 = np.percentile(np_branch, 25)
+# # # # #     percentile_45 = np.percentile(np_branch, 45)
+# # # # #     percentile_50 = np.percentile(np_branch, 50)
+# # # # #     percentile_55 = np.percentile(np_branch, 55)
+# # # # #     percentile_75 = np.percentile(np_branch, 75)
+# # # # #     selected_range = np_branch[(np_branch >= percentile_25) & (np_branch <= percentile_75)]
 
-# # show_figure([meshes] + line_traces + visualized_smooth_points)
+# # # # #     print('Branch ', idx, ':')
+# # # # #     print("0th: ", np.min(np_branch))
+# # # # #     print("25th: ", percentile_25)
+# # # # #     print("45th: ", percentile_45)
+# # # # #     print("50th: ", percentile_50)
+# # # # #     print("55th: ", percentile_55)
+# # # # #     print("75th: ", percentile_75)
+# # # # #     print("100th: ", np.max(np_branch))
+# # # # #     print("Min radius at half the length: ", branch[int(len(branch)/2)])
+# # # # #     print("Avg min radius (range 25th-75th): ", np.mean(selected_range))
+# # # # #     print("Avg min radius (range 0th-100th): ", np.mean(np_branch))
+
+
+# # # # # max_branch_pos = [idx for idx, value in enumerate(splitted_branches) if value == longest_branch]
+# # # # # ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if idx in max_branch_pos]
+# # # # # middle_ring = ring_vertices[int(len(ring_vertices)/2)]
+
+# # # # # middle_surface_points = vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]]
+# # # # # middle_intersection_points = intersection_points[int(len(intersection_points)/2)]
+
+# # # # # sum_distance = []
+# # # # # for idx, point in enumerate(middle_surface_points):
+# # # # #     sum_distance.append(euclidean_distance(point, middle_intersection_points[idx]))
+
+# # # # # mean_radius = sum(sum_distance)/len(sum_distance)
+# # # # # print("Average radius at half the length: ", mean_radius)
+
+# # # # visualized_ring_points = []
+# # # # # visualized_ring_points = generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]], 3, 'red')
+
+# # # # # # for interval in ranges:
+# # # # # #     line_traces = []
+# # # # # #     visualized_boundary_points = []
+# # # # # #     visualized_removed_points = []
+# # # # # #     visualized_inter_points = []
+
+# # # # # #     interval_rings = ring_vertices[interval[0]:interval[1]]
+# # # # # #     interval_removed_rings = removed_vertices[interval[0]:interval[1]]
+# # # # # #     interval_radiuses = radiuses[interval[0]:interval[1]]
+# # # # # #     interval_surfaces = all_surfaces[interval[0]:interval[1]]
+
+# # # # # #     for ring in interval_rings:
+# # # # # #         visualized_boundary_points.append(generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in ring]], 3, 'blue'))
+
+# # # # # #         # for vert in ring:
+# # # # # #         #     if euclidean_distance(vmtk_boundary_vertices[vert[0]], vert[1]) > 3:
+# # # # # #         #         line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 1, 'red'))
+
+# # # # # #     for ring in interval_removed_rings:
+# # # # # #         if len(ring) > 0:
+# # # # # #             visualized_removed_points.append(generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in ring]], 3, 'orange'))
+# # # # # #             # visualized_inter_points.append(generate_points(np.array([sublist[2] for sublist in ring]), 3, 'red'))
+
+# # # # # #             # for vert in ring:
+# # # # # #             #     if euclidean_distance(vmtk_boundary_vertices[vert[0]], vert[1]) > 3:
+# # # # # #             #         line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 1, 'red'))
+# # # # # #             # for vert in ring:
+# # # # # #             #     line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 1))
+    
+# # # # # #     # for radius in interval_radiuses:
+# # # # # #     #     line_traces.append(generate_lines(np.array(radius), 2))
+
+# # # # # #     # for group_surfaces in interval_surfaces:
+# # # # # #     #     for surface in group_surfaces:
+# # # # # #     #         line_traces.append(generate_lines(np.array([surface[0], surface[1]]), 2))
+# # # # # #     #         line_traces.append(generate_lines(np.array([surface[1], surface[2]]), 2))
+# # # # # #     #         line_traces.append(generate_lines(np.array([surface[0], surface[2]]), 2))
+
+# # # # # #     show_figure(line_traces + visualized_boundary_points + visualized_removed_points + visualized_inter_points)
+
+
+# # # # # # # # for idx, line in enumerate(new_splitted_lines):
+# # # # # # # #     line_traces.append(generate_lines(smooth_points[line], 2))
+# # # # # # # visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
+# # # # # # # visualized_smooth_points = generate_points_values(smooth_points, 1, 'green', points_values)
+# # # # # # # visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
+
+# # # # # # # # print(line_traces)
+# # # # # # # # print(visualized_boundary_points)
+# # # # # # # # print(visualized_smooth_points)
+
+# # show_figure([visualized_boundary_points] +  visualized_smooth_points)
+
+# # # # show_figure([meshes] + line_traces + visualized_smooth_points)
