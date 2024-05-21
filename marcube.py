@@ -3,6 +3,7 @@ import nrrd
 import matplotlib.pyplot as plt
 import time
 import collections
+from skimage import measure
 
 triTable =[
             [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
@@ -544,3 +545,24 @@ def getContourSegments(thres,cells):
     print("\nTime taken by algorithm\n"+'-'*40+"\n{} s".format(t2-t1))
     vertex_array = np.array(list(vertex_array.values()))
     return vertex_array[:,1:], np.array(face_array)
+
+
+# Create a sample 2D binary mask
+mask = np.zeros((100, 100), dtype=np.uint8)
+mask[30:70, 30:70] = 1  # A simple square in the center
+
+# Find contours at a constant value of 0.5
+contours = measure.find_contours(mask, level=0.5)
+
+# Plotting
+fig, ax = plt.subplots()
+
+# Display the original binary mask
+ax.imshow(mask, cmap=plt.cm.gray)
+
+# Plot the contours
+for contour in contours:
+    ax.plot(contour[:, 1], contour[:, 0], linewidth=2)
+
+ax.set_title('Binary Mask and its Contour')
+plt.show()

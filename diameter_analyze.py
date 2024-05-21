@@ -3,7 +3,10 @@ import numpy as np
 from scipy.spatial import KDTree, distance_matrix
 from sklearn.cluster import DBSCAN, KMeans
 from scipy.signal import argrelextrema
+from sklearn.decomposition import PCA
+from scipy.spatial import ConvexHull
 
+import alphashape
 import matplotlib.pyplot as plt
 import math
 import time
@@ -16,6 +19,7 @@ import random
 
 from visualize_graph import *
 from ray_intersection import *
+from descartes import PolygonPatch
 
 def split_smooth_lines(smooth_connected_lines, points, distance_threshold=2):
     new_splitted_lines = []
@@ -122,7 +126,7 @@ def find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices
                     break
                            
             if not exist:
-                if distance > 1.8*min_distance:
+                if distance > 8*min_distance:
                     exist = True
 
             if not exist:                                            
@@ -149,8 +153,53 @@ def perpendicular_planes(point1, point2):
 
     return v1, v2
 
+def point_to_line_distance(point, line_start, line_end):
+    """
+    Calculate the shortest distance from a point to a line segment.
+    """
+    px, py = point[0], point[1]
+    x1, y1 = line_start[0], line_start[1]
+    x2, y2 = line_end[0], line_end[1]
+    
+    # Calculate the line segment length squared
+    line_length_sq = (x2 - x1)**2 + (y2 - y1)**2
+    
+    if line_length_sq == 0:
+        # The line segment is a point
+        return np.linalg.norm(np.array(point) - np.array(line_start))
+    
+    # Projection formula to find the closest point on the line segment
+    t = max(0, min(1, np.dot(np.array([px - x1, py - y1]), np.array([x2 - x1, y2 - y1])) / line_length_sq))
+    projection = np.array([x1, y1]) + t * np.array([x2 - x1, y2 - y1])
+    
+    return np.linalg.norm(np.array(point) - projection)
 
-dataset_dir = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/'
+def find_closest_edges(points, edges):
+    """
+    Find the closest edge and its distance for each point.
+    
+    points: List of tuples (x, y)
+    edges: List of tuples ((x1, y1), (x2, y2))
+    
+    Returns a list of tuples (closest_edge, shortest_distance)
+    """
+    results = []
+    
+    for point in points:
+        min_distance = float('inf')
+        closest_edge = None
+        
+        for edge in edges:
+            distance = point_to_line_distance(point, edge[0], edge[1])
+            if distance < min_distance:
+                min_distance = distance
+                closest_edge = edge
+        
+        results.append(min_distance)
+    
+    return results
+
+dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
 segment_file_path = dataset_dir + 'BCW-1205-RES.nii.gz'
 original_file_path = dataset_dir + 'BCW-1205-RES_0000.nii.gz'
 
@@ -161,10 +210,10 @@ original_data = original_image.get_fdata()
 segment_data = segment_image.get_fdata()
 voxel_sizes = segment_image.header.get_zooms()
 info = {}
-sub_num = 'BCW-1222-RES'
-info_dir = '/Users/apple/Desktop/neuroscience/artery_separate/info_files/' + sub_num + '/'
+sub_num = 'BCW-1205-RES'
+info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/'
 
-for artery_index in [1, 2, 3, 5, 6, 7, 8]:
+for artery_index in [1,2]:
     artery_key = "Artery_" + str(artery_index)
     info[artery_key] = []
     
@@ -185,6 +234,7 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8]:
     cur_branch = splitted_branches[0]
     cur_pos = 0
     branches = [[]]
+    rings = [[]]
     line_traces = []
 
     for idx, ring in enumerate(ring_vertices):
@@ -194,6 +244,7 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8]:
             cur_pos = 0
             cur_branch = splitted_branches[idx]
             branches.append([])
+            rings.append([])
 
         # if cur_pos == 0:
         #     print("Branch ", cur_branch)
@@ -201,12 +252,15 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8]:
         if len(interval_radius):
             # print(f"""Length = {round(cur_pos, 2)} mm, at the position""", interval_radius[1], ", min radius =""", round(euclidean_distance(interval_radius[0], interval_radius[1]), 2), '(mm)')
             branches[-1].append(interval_radius)
+            rings[-1].append(ring)
 
         cur_pos += distance_threshold
 
     longest_branch = None
     longest_length = 0
     stenose_points = []
+    stenose_rings = []
+
     for idx, branch in enumerate(branches):
         # radius = [euclidean_distance(item[0], item[1]) for item in branch]
         # np_branch = np.array(radius)
@@ -251,7 +305,9 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8]:
         # # print("Avg min radius (range 25th-75th): ", np.mean(selected_range))
         # # print("Avg min radius (range 0th-100th): ", np.mean(np_branch))
 
+    chosen_ring = rings[longest_branch]
     longest_branch = branches[longest_branch]
+
     radius = [round(euclidean_distance(item[0], item[1]), 2) for item in longest_branch]
     for i in range(len(longest_branch)):
         info[artery_key].append({
@@ -262,9 +318,50 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8]:
         
         print(f"""Length = {i*distance_threshold} mm, at the position""", longest_branch[i][1], ", min radius =", radius[i], '(mm)')
     
+
     local_min = argrelextrema(np.array(radius), np.less)[0]
-    stenose_points += [item[1] for index, item in enumerate(longest_branch) if index in local_min.tolist()]
-        
+    stenose_points = [item[1] for index, item in enumerate(longest_branch) if index in local_min.tolist()]
+    stenose_rings = [item for index, item in enumerate(chosen_ring) if index in local_min.tolist()]
+    stenose_radius = [item for index, item in enumerate(radius) if index in local_min.tolist()]
+    # stenose_rings += [item for index, item in enumerate(chosen_ring)]
+
+    stenose_ring_points = []
+    
+    for idx, ring in enumerate(stenose_rings):
+        ring_vertex = [item[0] for item in ring]
+        ring_vertices = vmtk_boundary_vertices[ring_vertex]
+        pca = PCA(n_components=2)
+        points_2d = pca.fit_transform(ring_vertices)
+        # Calculate Convex Hull
+        hull = ConvexHull(points_2d)
+        interior_points = [idx for idx, point in enumerate(points_2d) if idx not in hull.vertices]
+        interior_pos = points_2d[interior_points]
+        edges = [points_2d[item] for item in hull.simplices]
+        results = find_closest_edges(interior_pos, edges)
+
+        if np.max(np.array(results)) >= 0.4*stenose_radius[idx]:
+            for item in stenose_rings[idx]:
+                stenose_ring_points.append(item[0])
+        # # Plotting
+        # plt.plot(points_2d[:, 0], points_2d[:, 1], 'o')
+        # for simplex in hull.simplices:
+        #     plt.plot(points_2d[simplex, 0], points_2d[simplex, 1], 'k-')
+        # plt.fill(points_2d[hull.vertices, 0], points_2d[hull.vertices, 1], 'b', alpha=0.2)
+        # plt.show()
+
+        # alpha_shape = alphashape.alphashape(points_2d,0.01)
+
+        # # Plotting
+        # fig, ax = plt.subplots()
+        # ax.scatter(points_2d[:, 0], points_2d[:, 1], c='blue', marker='o')
+        # ax.add_patch(PolygonPatch(alpha_shape, alpha=0.5))
+        # ax.set_title('2D Projection of 3D Points using PCA')
+        # ax.set_xlabel('Principal Component 1')
+        # ax.set_ylabel('Principal Component 2')
+        # ax.axis('equal')  # Ensure equal scaling for both axes
+
+        # plt.show()
+
     # print("Min radius at half the length: ", radius[int(len(longest_branch)/2)])
     
     
@@ -282,24 +379,13 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8]:
     # mean_radius = sum(sum_distance)/len(sum_distance)
     # print("Average radius at half the length: ", round(mean_radius, 2))
     
-    # visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
+    visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
     visualized_smooth_points = generate_points(smooth_points, 1, 'green')
-    visualized_stenose_points = generate_points(np.array(stenose_points), 3, 'red')
+    visualized_stenose_points = generate_points(np.array(stenose_points), 5, 'red')
+    visualized_stenose_ring_points = generate_points(vmtk_boundary_vertices[stenose_ring_points], 3, 'red')
+    mesh = generate_mesh(vmtk_boundary_vertices, vmtk_boundary_faces)
     
-    mesh = go.Mesh3d(
-        x=vmtk_boundary_vertices[:, 0],
-        y=vmtk_boundary_vertices[:, 1],
-        z=vmtk_boundary_vertices[:, 2],
-        i=vmtk_boundary_faces[:, 0],
-        j=vmtk_boundary_faces[:, 1],
-        k=vmtk_boundary_faces[:, 2],
-        opacity=0.7,
-        color="#000000"
-    )
-
-    # print(mesh)
-    
-    show_figure([mesh])
+    show_figure([mesh, visualized_smooth_points, visualized_stenose_points, visualized_boundary_points, visualized_stenose_ring_points])
 
 with open(info_dir + f'min_radius_BCW-1205-RES.json', 'w') as file:
     json.dump(info, file)  # indent=4 makes the file more readable

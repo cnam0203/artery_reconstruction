@@ -736,7 +736,7 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8]:
     skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines)
     # connected_lines, skeleton, skeleton_points = extend_skeleton(connected_lines, end_points, skeleton_points, original_data, processed_mask, skeleton, voxel_sizes)
 
-    vertices, faces, normals, values = measure.marching_cubes(skeleton, level=0.1, spacing=voxel_sizes)
+    vertices, faces, normals, values = measure.marching_cubes(skeleton, level=0.5, spacing=voxel_sizes)
     skeleton_points = voxel_sizes*(skeleton_points+0.5)
 
     vmtk_skeleton_vertices, vmtk_skeleton_faces = vmtk_smooth_mesh(vertices, faces, 2000)
