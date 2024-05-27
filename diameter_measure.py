@@ -691,10 +691,10 @@ def perpendicular_planes(point1, point2):
     return v1, v2
 
 # Initialize
-dataset_dir = '/Users/apple/Desktop/neuroscience/artery_separate/dataset/'
-segment_file_path = dataset_dir + 'BCW-1222-RES.nii.gz'
-original_file_path = dataset_dir + 'BCW-1222-RES_0000.nii.gz'
-sub_num = 'BCW-1222-RES'
+dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
+segment_file_path = dataset_dir + 'BCW-1139-RES.nii.gz'
+original_file_path = dataset_dir + 'BCW-1139-RES_0000.nii.gz'
+sub_num = 'BCW-1139-RES'
 # segment_file_path = dataset_dir + 'sub-581_run-1_mra_eICAB_CW.nii.gz'
 # original_file_path = dataset_dir + 'sub-581_run-1_mra_resampled.nii.gz'
 # centerline_file_path = dataset_dir + 'sub-9_run-1_mra_CircleOfWillis_centerline.nii.gz'
@@ -716,7 +716,7 @@ original_data = original_image.get_fdata()
 segment_data = segment_image.get_fdata()
 # centerline_data = centerline_image.get_fdata()
 voxel_sizes = segment_image.header.get_zooms()
-info_dir = '/Users/apple/Desktop/neuroscience/artery_separate/info_files/' + sub_num + '/'
+info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/'
 
 for artery_index in [1, 2, 3, 5, 6, 7, 8]:
     ## For treated kising vessels

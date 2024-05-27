@@ -88,11 +88,68 @@ def point_on_triangle_plane(v0, v1, v2, p, tolerance=1e-6):
     else:
         return False
 
+def calculate_normal_vector(P1, P2, P3):
+    """
+    Calculate the normal vector of a plane defined by three points in 3D space.
+
+    Parameters:
+    P1, P2, P3 (array-like): The three points defining the plane.
+
+    Returns:
+    array: The normal vector to the plane.
+    """
+    # Convert points to numpy arrays
+    P1 = np.array(P1)
+    P2 = np.array(P2)
+    P3 = np.array(P3)
+
+    # Calculate vectors v1 and v2
+    v1 = P2 - P1
+    v2 = P3 - P1
+
+    # Calculate the cross product
+    normal_vector = np.cross(v1, v2)
+
+    # Normalize the normal vector (optional, to get a unit normal vector)
+    normal_vector = normal_vector / np.linalg.norm(normal_vector)
+
+    return normal_vector
+
+def angle_between_vector_and_plane(vector, plane_normal):
+    """
+    Calculate the angle between a vector and a plane in 3D space.
+
+    Parameters:
+    vector (array-like): The 3D vector.
+    plane_normal (array-like): The normal vector of the plane.
+
+    Returns:
+    float: The angle between the vector and the plane in radians.
+    """
+    # Ensure inputs are numpy arrays
+    vector = np.array(vector)
+    plane_normal = np.array(plane_normal)
+
+    # Calculate the dot product and magnitudes of the vectors
+    dot_product = np.dot(vector, plane_normal)
+    vector_magnitude = np.linalg.norm(vector)
+    normal_magnitude = np.linalg.norm(plane_normal)
+
+    # Calculate the angle between the vector and the plane normal
+    cos_theta = dot_product / (vector_magnitude * normal_magnitude)
+    theta = np.arccos(cos_theta)
+
+    # The angle between the vector and the plane
+    angle_with_plane = np.degrees(np.pi / 2 - theta)
+
+    return angle_with_plane
+
 def ray_intersects_triangle(p1, p2, face):
     # break down triangle into the individual points
     v1 = face[0]
     v2 = face[1]
     v3 = face[2]
+    normal_vector = calculate_normal_vector(v1, v2, v3)
 
     ray_vec = p2 - p1
 
@@ -128,70 +185,6 @@ def ray_intersects_triangle(p1, p2, face):
         return True, intersection_point
     
     return False, None
-
-# def ray_intersects_triangle(p1, p2, face):
-#     epsilon = 1e-8  # Small positive number for numerical precision
-
-#     # Compute direction vector of the ray
-#     direction = p2 - p1
-
-#     # Compute vectors for two edges sharing v0
-#     v0 = face[0]
-#     v1 = face[1]
-#     v2 = face[2]
-
-#     e1 = v1 - v0
-#     e2 = v2 - v0
-
-#     # # Compute determinant to check if the ray is parallel to the triangle
-#     h = np.cross(direction, e2)
-#     a = np.dot(e1, h)
-#     if abs(a) < epsilon:
-#         return False, None  # Ray is parallel to the triangle
-
-#     # # Compute factors to compute u and v
-#     f = 1.0 / a
-#     s = p1 - v0
-#     u = f * np.dot(s, h)
-#     if u < 0 or u > 1:
-#         return False, None  # Intersection is outside the triangle
-
-#     q = np.cross(s, e1)
-#     v = f * np.dot(direction, q)
-#     if v < 0 or u + v > 1:
-#         return False, None  # Intersection is outside the triangle
-
-#     # Compute t to find the intersection point
-#     t = f * np.dot(e2, q)
-#     if t > epsilon:
-#         intersection_point = p1 + t * direction
-#         min_x, max_x, min_y, max_y, min_z, max_z = 0, 0, 0, 0, 0, 0
-
-#         if p1[0] < p2[0]:
-#             min_x = p1[0]
-#             max_x = p2[0]
-#         else:
-#             min_x = p2[0]
-#             max_x = p1[0]
-
-#         if p1[1] < p2[1]:
-#             min_y = p1[1]
-#             max_y = p2[1]
-#         else:
-#             min_y = p2[1]
-#             max_y = p1[1]
-
-#         if p1[2] < p2[2]:
-#             min_z = p1[2]
-#             max_z = p2[2]
-#         else:
-#             min_z = p2[2]
-#             max_z = p1[2]
-
-#         if min_x <= intersection_point[0] <= max_x and min_y <= intersection_point[1] <= max_y and min_z <= intersection_point[2] <= max_z:
-#             return True, intersection_point 
-
-#     return False, None  # No intersection
 
 def find_projection_point_on_line(P1, P2, Q):
     # Compute direction vector of the line
