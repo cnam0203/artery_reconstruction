@@ -466,75 +466,108 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
     return new_connected_lines, skeleton, skeleton_points_1
 
 def remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines):
-    new_connected_lines = []
-
-    for line in connected_lines:
-        if len(line) < 7 and ((line[0] in end_points) or (line[-1] in end_points)):
-            for point in line:
-                if point not in junction_points:
-                    pos = skeleton_points[point].astype(int)
-                    skeleton[pos[0]][pos[1]][pos[2]] = 0
-        else:
-            new_connected_lines.append(line)
     
-    end_points = []
-    junction_points = []
+    is_first = 0
+    count = 0
 
-    is_end = False
-    while not is_end:
-        is_end = True
+    while is_first == 0 or count > 0:
+        is_first += 1
+        count = 0
+        new_connected_lines = []
 
-        point_count = {}
+        # print('1. ', connected_lines, end_points, junction_points)
 
-        for idx, line in enumerate(new_connected_lines):
-            if line[0] not in point_count:
-                point_count[line[0]] = []
-            if line[-1] not in point_count:
-                point_count[line[-1]] = []
-            
-            point_count[line[0]].append(idx)
-            point_count[line[-1]].append(idx)
+        for line in connected_lines:
+            if len(line) <= 10 and ((line[0] in end_points) or (line[-1] in end_points)):
+                count += 1
+                for point in line:
+                    if point not in junction_points:
+                        pos = skeleton_points[point].astype(int)
+                        skeleton[pos[0]][pos[1]][pos[2]] = 0
+            else:
+                new_connected_lines.append(line)
 
-        merge_point = None
+        # print('2. ', new_connected_lines)
+        end_points = []
+        junction_points = []
+
+        is_end = False
         
-        for idx in point_count:
-            if len(point_count[idx]) == 2:
-                line_1 = new_connected_lines[point_count[idx][0]]
-                line_2 = new_connected_lines[point_count[idx][1]]
+        while not is_end:
+            is_end = True
+            point_count = {}
 
-                new_line = []
-                new_lines = []
-                reversed_line_2 = line_2[::-1]
-
-                if line_1[0] == line_2[0]:
-                    new_line = reversed_line_2[:-1] + line_1
-                elif line_1[0] == line_2[-1]:
-                    new_line = line_2[:-1] + line_1
-                elif line_1[-1] == line_2[0]:
-                    new_line = line_1[:-1] + line_2
-                else:
-                    new_line = line_1[:-1] + reversed_line_2
-                is_end = False
-
-                for idx_p, line in enumerate(new_connected_lines):
-                    if idx_p not in point_count[idx]:
-                        new_lines.append(line)
+            for idx, line in enumerate(new_connected_lines):
+                if line[0] not in point_count:
+                    point_count[line[0]] = []
+                if line[-1] not in point_count:
+                    point_count[line[-1]] = []
                 
-                new_lines.append(new_line)
-                new_connected_lines = new_lines
+                point_count[line[0]].append(idx)
+                point_count[line[-1]].append(idx)
 
-                break
-        
-        if is_end:
+            merge_point = None
+            
+            for idx in point_count:
+                if len(point_count[idx]) == 2:
+                    line_idx_1 = point_count[idx][0]
+                    line_idx_2 = point_count[idx][1]
+                    line_1 = new_connected_lines[line_idx_1]
+                    line_2 = new_connected_lines[line_idx_2]
+
+                    new_line = []
+                    new_lines = []
+                    reversed_line_2 = line_2[::-1]
+
+                    if line_1[0] == line_2[0] and line_1[-1] != line_2[-1]:
+                        new_line = reversed_line_2[:-1] + line_1
+                        is_end = False
+                    elif line_1[0] == line_2[-1] and line_1[-1] != line_2[0]:
+                        new_line = line_2[:-1] + line_1
+                        is_end = False
+                    elif line_1[-1] == line_2[0] and line_1[0] != line_2[-1]:
+                        new_line = line_1[:-1] + line_2
+                        is_end = False
+                    elif line_1[-1] == line_2[-1] and line_1[0] != line_2[0]:
+                        new_line = line_1[:-1] + reversed_line_2
+                        is_end = False
+
+                    if not is_end:
+                        for idx_p, line in enumerate(new_connected_lines):
+                            if idx_p not in point_count[idx]:
+                                new_lines.append(line)
+                        
+                        # print('Avant:', len(new_connected_lines))
+                        # print(new_connected_lines)
+                        new_lines.append(new_line)
+                        new_connected_lines = new_lines
+                        # print('Après:', len(new_connected_lines))
+                        # print(new_connected_lines)
+                        break
+            
             end_points = []
             junction_points = []
+            point_count = {}
+
+            for idx, line in enumerate(new_connected_lines):
+                if line[0] not in point_count:
+                    point_count[line[0]] = []
+                if line[-1] not in point_count:
+                    point_count[line[-1]] = []
+                
+                point_count[line[0]].append(idx)
+                point_count[line[-1]].append(idx)
+
 
             for idx in point_count:
                 if len(point_count[idx]) == 1:
                     end_points.append(idx)
                 else:
                     junction_points.append(idx)
-    
+
+        connected_lines = new_connected_lines
+
+    print(len(new_connected_lines), new_connected_lines)        
     return skeleton, new_connected_lines, end_points, junction_points
 
 def angle_between_lines(point1, point2, point3):
@@ -719,6 +752,7 @@ voxel_sizes = segment_image.header.get_zooms()
 info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/'
 
 for artery_index in [1, 2, 3, 5, 6, 7, 8]:
+    print('Aryery ', artery_index)
     ## For treated kising vessels
     # processed_mask = segment_data
 
@@ -745,6 +779,8 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8]:
     # Extract boundary
     vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
     vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 10, 1)
+
+    smooth_points, smooth_connected_lines = skeleton_points, connected_lines
 
     np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
     np.savetxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')
