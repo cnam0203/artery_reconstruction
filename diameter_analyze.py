@@ -255,19 +255,7 @@ def sort_edges(edges):
                 
     return sorted_edges
 
-def area_of_polygon_from_edges(edges, point_2d):
-    sorted_edges = sort_edges(edges)
-
-    vertices = []
-    
-    # Extract unique vertices from the sorted edges
-    for edge in sorted_edges:
-        for vertex in edge:
-            if vertex not in vertices:
-                vertices.append(vertex)
-    
-    # Add the first vertex at the end to complete the loop
-    vertices.append(vertices[0])
+def area_of_polygon_from_edges(vertices, point_2d):
     vertices = point_2d[np.array(vertices)]
     
     # Calculate the areas of triangles formed by consecutive vertices
@@ -291,9 +279,121 @@ def normalize_array(array):
     normalized_array = (array - min_val) / (max_val - min_val)
     return normalized_array
 
+def point_on_line(a, b, p):
+    ap = p - a
+    ab = b - a
+    result = a + np.dot(ap, ab) / np.dot(ab, ab) * ab
+    return result
+
+def point_on_line(a, b, p):
+    ap = p - a
+    ab = b - a
+    result = a + np.dot(ap, ab) / np.dot(ab, ab) * ab
+    return result
+
+def find_middle_point(point_1_idx, point_2_idx, rest_points, points_2d, distance):
+    point_1 = points_2d[point_1_idx]
+    point_2 = points_2d[point_2_idx]
+    # Vector from P1 to P2
+    # line_vec = point_2 - point_1
+    # line_len = np.linalg.norm(line_vec)
+    # line_unitvec = line_vec / line_len
+    
+    min_dist = 100000
+    nearest_point = None
+    
+    print(point_1, point_2, distance)
+    for idx in rest_points:
+        point = points_2d[idx]
+        projection_point = point_on_line(point_1, point_2, point)
+
+        if point_1[0] < point_2[0]:
+            min_x = point_1[0]
+            max_x = point_2[0]
+        else:
+            min_x = point_2[0]
+            max_x = point_1[0]
+
+        if point_1[1] < point_2[1]:
+            min_y = point_1[1]
+            max_y = point_2[1]
+        else:
+            min_y = point_2[1]
+            max_y = point_1[1]
+
+        
+        if min_x <= projection_point[0] <= max_x and min_y <= projection_point[1] <= max_y:
+            dist = np.linalg.norm(point - projection_point)
+            if dist < min_dist and dist < distance:
+                min_dist = dist
+                nearest_point = idx
+
+        # vec_to_point = point - point_1
+        # projection_length = np.dot(vec_to_point, line_unitvec)
+        
+        # if projection_length < 0:
+        #     projection = point_1
+        # elif projection_length > line_len:
+        #     projection = point_2
+        # else:
+        #     projection = point_1 + projection_length * line_unitvec
+        
+        # dist = np.linalg.norm(point - projection)
+        
+        # if dist < min_dist and dist < distance:
+        #     min_dist = dist
+        #     nearest_point = idx
+    
+    return nearest_point
+
+def find_interior_hull(points_2d):
+    # x = np.concatenate((x[0,:], x[1,:]))
+    # y = np.concatenate((y[0,:], y[1,:]))
+    x = points_2d[:, 0]
+    y = points_2d[:, 1]
+
+    rSquared = x**2 + y**2
+    q = rSquared / max(rSquared)**2
+    xx = x / q
+    yy = y / q
+
+    hull = ConvexHull(np.column_stack((xx, yy)))
+
+    concave_points = hull.vertices.tolist()
+    rest_points = [idx for idx, i in enumerate(points_2d) if idx not in concave_points]
+    is_found = True
+
+    while is_found:
+        is_found = False
+        new_concave_points = []
+        
+        for i in range(len(concave_points)):
+            point_1 = concave_points[i-1]
+            point_2 = concave_points[i]
+
+            distance = np.linalg.norm(points_2d[point_1] - points_2d[point_2])
+
+            if distance > 0.5:
+                new_point = find_middle_point(point_1, point_2, rest_points, points_2d, distance)
+                if new_point != None:
+                    is_found = True
+                    new_concave_points.append(new_point)
+                    rest_points = [element for element in rest_points if element != new_point]
+
+            new_concave_points.append(point_2)
+        
+        concave_points = new_concave_points
+
+    return hull, np.array(new_concave_points)
+    # plt.plot(points_2d[:, 0], points_2d[:, 1], 'o')
+    # for simplex in hull.simplices:
+    #     plt.plot(points_2d[simplex, 0], points_2d[simplex, 1], 'k-')
+    # plt.fill(points_2d[hull.vertices, 0], points_2d[hull.vertices, 1], 'b', alpha=0.2)
+    # plt.show()
+
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
-segment_file_path = dataset_dir + 'BCW-1139-RES.nii.gz'
-original_file_path = dataset_dir + 'BCW-1139-RES_0000.nii.gz'
+segment_file_path = dataset_dir + 'BCW-1205-RES.nii.gz'
+original_file_path = dataset_dir + 'BCW-1205-RES_0000.nii.gz'
 
 segment_image = nib.load(segment_file_path)
 original_image = nib.load(original_file_path)
@@ -302,7 +402,7 @@ original_data = original_image.get_fdata()
 segment_data = segment_image.get_fdata()
 voxel_sizes = segment_image.header.get_zooms()
 info = {}
-sub_num = 'BCW-1139-RES'
+sub_num = 'BCW-1205-RES'
 info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/'
 
 for artery_index in [1,2]:
@@ -318,279 +418,241 @@ for artery_index in [1,2]:
     with open(info_dir + f'smooth_connected_lines_{artery_index}.json', 'r') as file:
         smooth_connected_lines = json.load(file)
     
-    # # Calculate distance
-    # distance_threshold = 0.5
-    # new_splitted_lines, points_values, splitted_branches = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
-    # ring_vertices, removed_vertices, intersection_points, radiuses, all_surfaces = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
+    # Calculate distance
+    distance_threshold = 0.5
+    new_splitted_lines, points_values, splitted_branches = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
+    ring_vertices, removed_vertices, intersection_points, radiuses, all_surfaces = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
 
-    # cur_branch = splitted_branches[0]
-    # cur_pos = 0
-    # branches = [[]]
-    # rings = [[]]
-    # line_traces = []
+    cur_branch = splitted_branches[0]
+    cur_pos = 0
+    branches = [[]]
+    rings = [[]]
+    line_traces = []
 
-    # for idx, ring in enumerate(ring_vertices):
-    #     interval_radius = radiuses[idx]
+    for idx, ring in enumerate(ring_vertices):
+        interval_radius = radiuses[idx]
 
-    #     if splitted_branches[idx] != cur_branch:
-    #         cur_pos = 0
-    #         cur_branch = splitted_branches[idx]
-    #         branches.append([])
-    #         rings.append([])
+        if splitted_branches[idx] != cur_branch:
+            cur_pos = 0
+            cur_branch = splitted_branches[idx]
+            branches.append([])
+            rings.append([])
 
-    #     # if cur_pos == 0:
-    #     #     print("Branch ", cur_branch)
+        # if cur_pos == 0:
+        #     print("Branch ", cur_branch)
         
-    #     if len(interval_radius):
-    #         # print(f"""Length = {round(cur_pos, 2)} mm, at the position""", interval_radius[1], ", min radius =""", round(euclidean_distance(interval_radius[0], interval_radius[1]), 2), '(mm)')
-    #         branches[-1].append(interval_radius)
-    #         rings[-1].append(ring)
+        if len(interval_radius):
+            # print(f"""Length = {round(cur_pos, 2)} mm, at the position""", interval_radius[1], ", min radius =""", round(euclidean_distance(interval_radius[0], interval_radius[1]), 2), '(mm)')
+            branches[-1].append(interval_radius)
+            rings[-1].append(ring)
 
-    #     cur_pos += distance_threshold
+        cur_pos += distance_threshold
 
-    # longest_branch = None
-    # longest_length = 0
-    # stenose_points = []
-    # stenose_rings = []
+    longest_branch = None
+    longest_length = 0
+    stenose_points = []
+    stenose_rings = []
 
-    # for idx, branch in enumerate(branches):
-    #     # radius = [euclidean_distance(item[0], item[1]) for item in branch]
-    #     # np_branch = np.array(radius)
+    for idx, branch in enumerate(branches):
+        # radius = [euclidean_distance(item[0], item[1]) for item in branch]
+        # np_branch = np.array(radius)
 
-    #     if len(branch) > longest_length:
-    #         longest_length = len(branch)
-    #         longest_branch = idx
+        if len(branch) > longest_length:
+            longest_length = len(branch)
+            longest_branch = idx
 
-    #     # percentile_25 = np.percentile(np_branch, 25)
-    #     # percentile_45 = np.percentile(np_branch, 45)
-    #     # percentile_50 = np.percentile(np_branch, 50)
-    #     # percentile_55 = np.percentile(np_branch, 55)
-    #     # percentile_75 = np.percentile(np_branch, 75)
-    #     # selected_range = np_branch[(np_branch >= percentile_25) & (np_branch <= percentile_75)]
+        # percentile_25 = np.percentile(np_branch, 25)
+        # percentile_45 = np.percentile(np_branch, 45)
+        # percentile_50 = np.percentile(np_branch, 50)
+        # percentile_55 = np.percentile(np_branch, 55)
+        # percentile_75 = np.percentile(np_branch, 75)
+        # selected_range = np_branch[(np_branch >= percentile_25) & (np_branch <= percentile_75)]
         
-    #     # local_min = argrelextrema(np.array(radius), np.less)[0]
-    #     # stenose_points += [item[1] for index, item in enumerate(branch) if index in local_min.tolist()]
+        # local_min = argrelextrema(np.array(radius), np.less)[0]
+        # stenose_points += [item[1] for index, item in enumerate(branch) if index in local_min.tolist()]
         
-    #     # # Distance between each point (in mm)
-    #     # distance_between_points = distance_threshold
-    #     # x_values = [i * distance_between_points for i in range(len(radius))]
+        # # Distance between each point (in mm)
+        # distance_between_points = distance_threshold
+        # x_values = [i * distance_between_points for i in range(len(radius))]
 
-    #     # # Create the plot
-    #     # plt.figure(figsize=(10, 6))
-    #     # plt.plot(x_values, radius, marker='o', linestyle='-', color='b')
+        # # Create the plot
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(x_values, radius, marker='o', linestyle='-', color='b')
 
-    #     # # Add title and labels
-    #     # plt.title('Min Radius (mm)')
-    #     # plt.xlabel('Length (mm)')
-    #     # plt.ylabel('Radius (mm)')
-    #     # plt.show()
+        # # Add title and labels
+        # plt.title('Min Radius (mm)')
+        # plt.xlabel('Length (mm)')
+        # plt.ylabel('Radius (mm)')
+        # plt.show()
         
-    #     # # print('Branch ', idx, ':')
-    #     # # print("0th: ", np.min(np_branch))
-    #     # # print("25th: ", percentile_25)
-    #     # # print("45th: ", percentile_45)
-    #     # # print("50th: ", percentile_50)
-    #     # # print("55th: ", percentile_55)
-    #     # # print("75th: ", percentile_75)
-    #     # # print("100th: ", np.max(np_branch))
-    #     # print("Min radius at half the length: ", round(radius[int(len(branch)/2)], 2))
-    #     # # print("Avg min radius (range 25th-75th): ", np.mean(selected_range))
-    #     # # print("Avg min radius (range 0th-100th): ", np.mean(np_branch))
+        # # print('Branch ', idx, ':')
+        # # print("0th: ", np.min(np_branch))
+        # # print("25th: ", percentile_25)
+        # # print("45th: ", percentile_45)
+        # # print("50th: ", percentile_50)
+        # # print("55th: ", percentile_55)
+        # # print("75th: ", percentile_75)
+        # # print("100th: ", np.max(np_branch))
+        # print("Min radius at half the length: ", round(radius[int(len(branch)/2)], 2))
+        # # print("Avg min radius (range 25th-75th): ", np.mean(selected_range))
+        # # print("Avg min radius (range 0th-100th): ", np.mean(np_branch))
 
-    # chosen_ring = rings[longest_branch]
-    # longest_branch = branches[longest_branch]
+    chosen_ring = rings[longest_branch]
+    longest_branch = branches[longest_branch]
 
-    # radius = [round(euclidean_distance(item[0], item[1]), 2) for item in longest_branch]
-    # # for i in range(len(longest_branch)):
-    # #     info[artery_key].append({
-    # #         'Length (mm)': i*distance_threshold,
-    # #         'Position at': longest_branch[i][1].tolist(),
-    # #         'Min radius (mm)': radius[i]
-    # #     })
+    radius = [round(euclidean_distance(item[0], item[1]), 2) for item in longest_branch]
+    # for i in range(len(longest_branch)):
+    #     info[artery_key].append({
+    #         'Length (mm)': i*distance_threshold,
+    #         'Position at': longest_branch[i][1].tolist(),
+    #         'Min radius (mm)': radius[i]
+    #     })
         
-    # #     print(f"""Length = {i*distance_threshold} mm, at the position""", longest_branch[i][1], ", min radius =", radius[i], '(mm)')
+    #     print(f"""Length = {i*distance_threshold} mm, at the position""", longest_branch[i][1], ", min radius =", radius[i], '(mm)')
     
-    # local_min = argrelextrema(np.array(radius), np.less)[0]
-    # stenose_points = [item[1] for index, item in enumerate(longest_branch) if index in local_min.tolist()]
-    # # stenose_rings = [item for index, item in enumerate(chosen_ring) if index in local_min.tolist()]
-    # # stenose_radius = [item for index, item in enumerate(radius) if index in local_min.tolist()]
-    # stenose_rings += [item for index, item in enumerate(chosen_ring)]
-    # stenose_radius = [item for index, item in enumerate(radius)]
+    local_min = argrelextrema(np.array(radius), np.less)[0]
+    stenose_points = [item[1] for index, item in enumerate(longest_branch) if index in local_min.tolist()]
+    # stenose_rings = [item for index, item in enumerate(chosen_ring) if index in local_min.tolist()]
+    # stenose_radius = [item for index, item in enumerate(radius) if index in local_min.tolist()]
+    stenose_rings += [item for index, item in enumerate(chosen_ring)]
+    stenose_radius = [item for index, item in enumerate(radius)]
 
-    # stenose_ring_points = []
-    # stenosis_indices = []
-    # surface_areas = []
-    # is_stenoses = []
-    # max_distances = []
+    stenose_ring_points = []
+    stenosis_indices = []
+    ex_surface_areas = []
+    in_surface_areas = []
+    is_stenoses = []
+    max_distances = []
 
-    # for idx, ring in enumerate(stenose_rings):
-    #     ring_vertex = [item[0] for item in ring]
+    for idx, ring in enumerate(stenose_rings):
+        ring_vertex = [item[0] for item in ring]
 
-    #     if len(ring_vertex) > 2:
-    #         ring_vertices = vmtk_boundary_vertices[ring_vertex]
-    #         pca = PCA(n_components=2)
-    #         points_2d = pca.fit_transform(ring_vertices)
-    #         # Calculate Convex Hull
-    #         hull = ConvexHull(points_2d)
-    #         interior_points = [idx for idx, point in enumerate(points_2d) if idx not in hull.vertices]
-    #         interior_pos = points_2d[interior_points]
-    #         edges = [points_2d[item] for item in hull.simplices]
-    #         results = find_closest_edges(interior_pos, edges)
+        if len(ring_vertex) > 2:
+            ring_vertices = vmtk_boundary_vertices[ring_vertex]
+            pca = PCA(n_components=2)
+            points_2d = pca.fit_transform(ring_vertices)
+            # Calculate convex Hull
+            ex_hull = ConvexHull(points_2d)
+            ex_surface_area = area_of_polygon_from_edges(ex_hull.vertices, points_2d)
+            ex_surface_areas.append(ex_surface_area)
+            plt.plot(points_2d[:, 0], points_2d[:, 1], 'o')
+            for simplex in ex_hull.simplices:
+                plt.plot(points_2d[simplex, 0], points_2d[simplex, 1], 'k-')
+            plt.fill(points_2d[ex_hull.vertices, 0], points_2d[ex_hull.vertices, 1], 'b', alpha=0.2)
 
-    #         surface_area = area_of_polygon_from_edges(hull.simplices, points_2d)
-    #         surface_areas.append(surface_area)
-    #         max_distances.append(np.max(np.array(results)))
+            # Find maxmimum distance from interior points to convex hull
+            interior_points = [idx for idx, point in enumerate(points_2d) if idx not in ex_hull.vertices]
+            interior_pos = points_2d[interior_points]
+            edges = [points_2d[item] for item in ex_hull.simplices]
+            results = find_closest_edges(interior_pos, edges)
+            max_distances.append(np.max(np.array(results)))
+            max_pos = None
+            is_stenose = False
+            if np.max(np.array(results)) >= 0.4*stenose_radius[idx]:
+                is_stenose = True
+                max_idx = np.argmax(np.array(results))
+                max_pos = interior_pos[max_idx]
 
-    #         max_pos = None
-    #         is_stenose = False
-    #         if np.max(np.array(results)) >= 0.4*stenose_radius[idx]:
-    #             is_stenose = True
-    #             max_idx = np.argmax(np.array(results))
-    #             max_pos = interior_pos[max_idx]
+                for item in stenose_rings[idx]:
+                    stenose_ring_points.append(item[0])
+            is_stenoses.append(is_stenose)
 
-    #             for item in stenose_rings[idx]:
-    #                 stenose_ring_points.append(item[0])
+            # Find the interior hull
+            in_hull, new_concave_points = find_interior_hull(points_2d)
+            in_surface_area = area_of_polygon_from_edges(new_concave_points, points_2d)
+            in_surface_areas.append(in_surface_area)
 
-    #         is_stenoses.append(is_stenose)
+            for idx in range(new_concave_points.shape[0]):
+                plt.plot(points_2d[new_concave_points[[idx-1, idx]], 0], points_2d[new_concave_points[[idx-1, idx]], 1], 'k-')
+            plt.fill(points_2d[new_concave_points, 0], points_2d[new_concave_points, 1], 'r', alpha=0.2)
 
-    #         plt.plot(points_2d[:, 0], points_2d[:, 1], 'o')
-    #         for simplex in hull.simplices:
-    #             plt.plot(points_2d[simplex, 0], points_2d[simplex, 1], 'k-')
-    #         plt.fill(points_2d[hull.vertices, 0], points_2d[hull.vertices, 1], 'b', alpha=0.2)
+            # Plotting
+            if is_stenose:
+                print('Length (mm):', idx*distance_threshold, ', surface area:', ex_surface_area, ('mm2'), ', min distance to centerline:', radius[idx], 'mm', ', max distance to surface:', np.max(np.array(results)), 'mm', ', concave')
+                plt.suptitle('Stenosis')
+                stenosis_indices.append(idx)
+                plt.scatter(max_pos[0], max_pos[1], color='red', s=50)
+            else:
+                print('Length (mm):', idx*distance_threshold, ', surface area:', ex_surface_area, ('mm2'), ', min distance to centerline:', radius[idx], 'mm', ', max distance to surface:', np.max(np.array(results)), 'mm', ', convex')
+                plt.suptitle('Without stenosis')
 
-    #         # Plotting
-    #         if is_stenose:
-    #             print('Length (mm):', idx*distance_threshold, ', surface area:', surface_area, ('mm2'), ', min distance to centerline:', radius[idx], 'mm', ', max distance to surface:', np.max(np.array(results)), 'mm', ', concave')
-    #             plt.suptitle('Stenosis')
-    #             stenosis_indices.append(idx)
-    #             plt.scatter(max_pos[0], max_pos[1], color='red', s=50)
-    #         else:
-    #             print('Length (mm):', idx*distance_threshold, ', surface area:', surface_area, ('mm2'), ', min distance to centerline:', radius[idx], 'mm', ', max distance to surface:', np.max(np.array(results)), 'mm', ', convex')
-    #             plt.suptitle('Without stenosis')
+            plt.show()
 
-    #         plt.show()
+        else:
+            ex_surface_areas.append(0)
+            in_surface_areas.append(0)
+            max_distances.append(0)
+            is_stenoses.append(False)
+    # Plotting the first line
+    x_values = [i*distance_threshold for i in range(len(radius))]
 
-    #     else:
-    #         surface_areas.append(0)
-    #         max_distances.append(0)
-    #         is_stenoses.append(False)
-    # # Plotting the first line
+    plt.figure(figsize=(np.max(np.array(x_values)), np.max(radius)))
+    # plt.plot(x_values, normalize_array(np.array(radius)), label='Min distance to centerline')
+    # plt.plot(x_values, normalize_array(np.array(max_distances)), label='Max distance to surface')
+    # plt.plot(x_values, normalize_array(np.array(ex_surface_areas)), label='Ex Surface area')
+    # plt.plot(x_values, normalize_array(np.array(in_surface_areas)), label='In Surface area')
+    # plt.plot(x_values, np.array(is_stenoses).astype(int), marker='o', linestyle='-', label='Is stenose')
+
+    plt.plot(x_values, np.array(ex_surface_areas), label='Ex Surface area')
+    plt.plot(x_values, np.array(in_surface_areas), label='In Surface area')
+    plt.plot(x_values, np.array(is_stenoses).astype(int), marker='o', linestyle='-', label='Is stenose')
+
+    # Adding labels and title
+    plt.xlabel('Length (mm)')
+    plt.title('Change in vascular geometry')
+    plt.legend()  # Show legend with labels
+
+    # Displaying the plot
+    plt.show()
+
+    # stenosis_min = np.array([item for idx, item in enumerate(local_min.tolist()) if idx in stenosis_indices])
+    # radius_array = np.array(radius)
     # x_values = [i*distance_threshold for i in range(len(radius))]
+    # # Plot the line graph
+    # plt.figure(figsize=(np.max(np.array(x_values)), np.max(radius_array)))
+    # plt.plot(x_values, radius, label='Radius')
+    # plt.scatter(local_min*distance_threshold, radius_array[local_min], color='red', zorder=5, label='Local Minima')
+    # plt.scatter(stenosis_min*distance_threshold, radius_array[stenosis_min], color='green', zorder=5, label='Stenosis point')
+    # plt.xlabel('Position')
+    # plt.ylabel('Radius')
+    # plt.title('Radius Values with Local Minima Highlighted')
+    # plt.legend()
+    # plt.show()
 
-    # # plt.figure(figsize=(np.max(np.array(x_values)), np.max(radius)))
-    # # plt.plot(x_values, normalize_array(np.array(radius)), label='Min distance to centerline')
-    # # plt.plot(x_values, normalize_array(np.array(max_distances)), label='Max distance to surface')
-    # # plt.plot(x_values, normalize_array(np.array(surface_areas)), label='Surface area')
-    # # plt.plot(x_values, np.array(is_stenoses).astype(int), marker='o', linestyle='-', label='Is stenose')
+        # alpha_shape = alphashape.alphashape(points_2d,0.01)
 
-    # # # Adding labels and title
-    # # plt.xlabel('Length (mm)')
-    # # plt.title('Change in vascular geometry')
-    # # plt.legend()  # Show legend with labels
+        # # Plotting
+        # fig, ax = plt.subplots()
+        # ax.scatter(points_2d[:, 0], points_2d[:, 1], c='blue', marker='o')
+        # ax.add_patch(PolygonPatch(alpha_shape, alpha=0.5))
+        # ax.set_title('2D Projection of 3D Points using PCA')
+        # ax.set_xlabel('Principal Component 1')
+        # ax.set_ylabel('Principal Component 2')
+        # ax.axis('equal')  # Ensure equal scaling for both axes
 
-    # # # Displaying the plot
-    # # plt.show()
+        # plt.show()
 
-    # trace1 = go.Scatter(
-    #     x=x_values,
-    #     y=normalize_array(np.array(radius)),
-    #     mode='lines',
-    #     name='Min distance to centerline'
-    # )
-
-    # trace2 = go.Scatter(
-    #     x=x_values,
-    #     y=normalize_array(np.array(max_distances)),
-    #     mode='lines',
-    #     name='Max distance to surface'
-    # )
-
-    # trace3 = go.Scatter(
-    #     x=x_values,
-    #     y=normalize_array(np.array(surface_areas)),
-    #     mode='lines',
-    #     name='Surface area'
-    # )
-
-    # trace4 = go.Scatter(
-    #     x=x_values,
-    #     y=np.array(is_stenoses).astype(int),
-    #     mode='markers+lines',
-    #     name='Is stenose'
-    # )
-
-    # # Create the layout
-    # layout = go.Layout(
-    #     scene=dict(
-    #         aspectmode='manual',
-    #         xaxis = dict(visible=False),
-    #         yaxis = dict(visible=False),
-    #         zaxis =dict(visible=False)
-    #         # camera=dict(
-    #         #     eye=dict(x=1, y=1, z=1)
-    #         # ),
-    #         # aspectratio=dict(x=1, y=1, z=1)
-    #     ),
-    #     title='Change in vascular geometry',
-    #     xaxis=dict(title='Length (mm)'),
-    #     yaxis=dict(title='Normalized Values'),
-    #     legend=dict(x=0, y=1)
-    # )
-
-    # # Create the figure
-    # fig = go.Figure(data=[trace1, trace2, trace3, trace4], layout=layout)
-
-    # # Display the plot
-    # fig.show()
-
-    # # stenosis_min = np.array([item for idx, item in enumerate(local_min.tolist()) if idx in stenosis_indices])
-    # # radius_array = np.array(radius)
-    # # x_values = [i*distance_threshold for i in range(len(radius))]
-    # # # Plot the line graph
-    # # plt.figure(figsize=(np.max(np.array(x_values)), np.max(radius_array)))
-    # # plt.plot(x_values, radius, label='Radius')
-    # # plt.scatter(local_min*distance_threshold, radius_array[local_min], color='red', zorder=5, label='Local Minima')
-    # # plt.scatter(stenosis_min*distance_threshold, radius_array[stenosis_min], color='green', zorder=5, label='Stenosis point')
-    # # plt.xlabel('Position')
-    # # plt.ylabel('Radius')
-    # # plt.title('Radius Values with Local Minima Highlighted')
-    # # plt.legend()
-    # # plt.show()
-
-    #     # alpha_shape = alphashape.alphashape(points_2d,0.01)
-
-    #     # # Plotting
-    #     # fig, ax = plt.subplots()
-    #     # ax.scatter(points_2d[:, 0], points_2d[:, 1], c='blue', marker='o')
-    #     # ax.add_patch(PolygonPatch(alpha_shape, alpha=0.5))
-    #     # ax.set_title('2D Projection of 3D Points using PCA')
-    #     # ax.set_xlabel('Principal Component 1')
-    #     # ax.set_ylabel('Principal Component 2')
-    #     # ax.axis('equal')  # Ensure equal scaling for both axes
-
-    #     # plt.show()
-
-    # # print("Min radius at half the length: ", radius[int(len(longest_branch)/2)])
+    # print("Min radius at half the length: ", radius[int(len(longest_branch)/2)])
     
     
-    # # max_branch_pos = [idx for idx, value in enumerate(splitted_branches) if value == longest_branch]
-    # # ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if idx in max_branch_pos]
-    # # middle_ring = ring_vertices[int(len(ring_vertices)/2)]
+    # max_branch_pos = [idx for idx, value in enumerate(splitted_branches) if value == longest_branch]
+    # ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if idx in max_branch_pos]
+    # middle_ring = ring_vertices[int(len(ring_vertices)/2)]
 
-    # # middle_surface_points = vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]]
-    # # middle_intersection_points = intersection_points[int(len(intersection_points)/2)]
+    # middle_surface_points = vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]]
+    # middle_intersection_points = intersection_points[int(len(intersection_points)/2)]
 
-    # # sum_distance = []
-    # # for idx, point in enumerate(middle_surface_points):
-    # #     sum_distance.append(euclidean_distance(point, middle_intersection_points[idx]))
+    # sum_distance = []
+    # for idx, point in enumerate(middle_surface_points):
+    #     sum_distance.append(euclidean_distance(point, middle_intersection_points[idx]))
 
-    # # mean_radius = sum(sum_distance)/len(sum_distance)
-    # # print("Average radius at half the length: ", round(mean_radius, 2))
+    # mean_radius = sum(sum_distance)/len(sum_distance)
+    # print("Average radius at half the length: ", round(mean_radius, 2))
     
     visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
     visualized_smooth_points = generate_points(smooth_points, 3, 'red')
-    # visualized_stenose_points = generate_points(np.array(stenose_points), 5, 'red')
-    # visualized_stenose_ring_points = generate_points(vmtk_boundary_vertices[stenose_ring_points], 3, 'red')
+    visualized_stenose_points = generate_points(np.array(stenose_points), 5, 'red')
+    visualized_stenose_ring_points = generate_points(vmtk_boundary_vertices[stenose_ring_points], 3, 'red')
     mesh = generate_mesh(vmtk_boundary_vertices, vmtk_boundary_faces)
     
     line_traces = []
@@ -602,8 +664,8 @@ for artery_index in [1,2]:
     show_figure([mesh, 
     visualized_smooth_points, 
     visualized_boundary_points, 
-    # visualized_stenose_points, 
-    # visualized_stenose_ring_points
+    visualized_stenose_points, 
+    visualized_stenose_ring_points
     ]
     + line_traces
     )
