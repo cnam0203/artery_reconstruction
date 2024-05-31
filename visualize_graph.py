@@ -1,7 +1,7 @@
 import plotly.graph_objs as go
 
 
-def show_figure(data):
+def show_figure(data, title="3D Mesh Figure"):
     """
     The function `show_figure` in Python creates a 3D figure with specified layout settings and displays
     it.
@@ -11,6 +11,7 @@ def show_figure(data):
     a different type of visualization (e.g., scatter plot, line plot, bar chart)
     """
     layout = go.Layout(
+        title=title,
         scene=dict(
             aspectmode='manual',
             xaxis = dict(visible=False),
@@ -71,8 +72,26 @@ def generate_mesh(vertices, faces):
         i=faces[:, 0],
         j=faces[:, 1],
         k=faces[:, 2],
-        opacity=0.3,
-        color='#50ad61'
+        # opacity=0.3,
+        # color='#50ad61'
+    )
+
+    return mesh
+
+def generate_mesh_color(vertices, faces, colors):
+    hover_text = [f'Color: {color}' for color in colors]
+    mesh = go.Mesh3d(
+        x=vertices[:, 0],
+        y=vertices[:, 1],
+        z=vertices[:, 2],
+        i=faces[:, 0],
+        j=faces[:, 1],
+        k=faces[:, 2],
+        intensity=colors,
+        colorscale='Viridis',
+        hoverinfo='text',
+        hovertext=hover_text,
+        name='Stenosis ratio'
     )
 
     return mesh

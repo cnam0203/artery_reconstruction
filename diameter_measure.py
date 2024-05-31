@@ -725,9 +725,9 @@ def perpendicular_planes(point1, point2):
 
 # Initialize
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
-segment_file_path = dataset_dir + 'BCW-1139-RES.nii.gz'
-original_file_path = dataset_dir + 'BCW-1139-RES_0000.nii.gz'
-sub_num = 'BCW-1139-RES'
+segment_file_path = dataset_dir + 'BCW-1205-RES.nii.gz'
+original_file_path = dataset_dir + 'BCW-1205-RES_0000.nii.gz'
+sub_num = 'BCW-1205-RES'
 # segment_file_path = dataset_dir + 'sub-581_run-1_mra_eICAB_CW.nii.gz'
 # original_file_path = dataset_dir + 'sub-581_run-1_mra_resampled.nii.gz'
 # centerline_file_path = dataset_dir + 'sub-9_run-1_mra_CircleOfWillis_centerline.nii.gz'
@@ -751,7 +751,7 @@ segment_data = segment_image.get_fdata()
 voxel_sizes = segment_image.header.get_zooms()
 info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/'
 
-for artery_index in [1, 2, 3, 5, 6, 7, 8]:
+for artery_index in [3, 5, 6, 7, 8]:
     print('Aryery ', artery_index)
     ## For treated kising vessels
     # processed_mask = segment_data
@@ -780,7 +780,7 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8]:
     vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
     vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 10, 1)
 
-    smooth_points, smooth_connected_lines = skeleton_points, connected_lines
+
 
     np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
     np.savetxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')

@@ -229,6 +229,6 @@ def select_faces_with_chosen_vertices(vertices, faces, chosen_vertices, loop=2):
                 unique_tuples = set(tuple_list)
                 selected_faces = [np.array(t) for t in unique_tuples]
 
-    selected_faces = vertices[selected_faces]
-    return np.array(selected_faces)
+    selected_faces = vertices[np.array(selected_faces)]
+    return selected_faces
 
