@@ -28,7 +28,7 @@ def show_figure(data, title="3D Mesh Figure"):
 
     fig = go.Figure(data=data, layout=layout)
     # fig.update_layout(showlegend=False)
-    fig.update_layout(autosize=False, width=2000, height=1500, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', )
+    fig.update_layout(autosize=False, width=2000, height=1200, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', )
     fig.show()
 
 

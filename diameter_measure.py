@@ -751,7 +751,7 @@ segment_data = segment_image.get_fdata()
 voxel_sizes = segment_image.header.get_zooms()
 info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/'
 
-for artery_index in [3, 5, 6, 7, 8]:
+for artery_index in [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
     print('Aryery ', artery_index)
     ## For treated kising vessels
     # processed_mask = segment_data
@@ -778,7 +778,7 @@ for artery_index in [3, 5, 6, 7, 8]:
 
     # Extract boundary
     vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
-    vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 10, 1)
+    vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 20, 1)
 
 
 

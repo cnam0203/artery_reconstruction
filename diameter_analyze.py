@@ -622,20 +622,20 @@ for artery_index in [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
             stenosis_ratios[idx] = distances[idx]
 
     stenosis_ratios = np.array(stenosis_ratios)/refer_radius
-    stenosis_ratios[stenosis_ratios > 0.6] = 1
+    stenosis_ratios[stenosis_ratios >= 1] = 1
 
     # Initialize the color array with the same size as stenosis_ratios
     color_array = np.empty(stenosis_ratios.shape, dtype='<U6')
 
     # Assign colors based on the ratios
-    color_array[stenosis_ratios < 0.2] = stenosis_colors['0']
-    color_array[(stenosis_ratios >= 0.2) & (stenosis_ratios < 0.5)] = stenosis_colors['1']
-    color_array[(stenosis_ratios >= 0.5) & (stenosis_ratios < 0.7)] = stenosis_colors['2']
-    color_array[stenosis_ratios >= 0.7] = stenosis_colors['3']
+    color_array[stenosis_ratios < 0.2] = 1
+    color_array[(stenosis_ratios >= 0.2) & (stenosis_ratios < 0.5)] = 2
+    color_array[(stenosis_ratios >= 0.5) & (stenosis_ratios < 0.7)] = 3
+    color_array[stenosis_ratios >= 0.7] = 4
 
     vmtk_boundary_vertices_all.append(vmtk_boundary_vertices)
     vmtk_boundary_faces_all.append(vmtk_boundary_faces + vert_num)
-    stenosis_ratios_all.append(stenosis_ratios)
+    stenosis_ratios_all.append(color_array)
     vert_num += vmtk_boundary_vertices.shape[0]
     # stenose_ring_points = []
     # stenosis_indices = []
@@ -796,7 +796,6 @@ vmtk_boundary_vertices_all = np.concatenate(vmtk_boundary_vertices_all, axis=0)
 vmtk_boundary_faces_all = np.concatenate(vmtk_boundary_faces_all, axis=0)
 stenosis_ratios_all = np.concatenate(stenosis_ratios_all, axis=0)
 
-print()
 
 mesh = generate_mesh_color(vmtk_boundary_vertices_all, vmtk_boundary_faces_all, stenosis_ratios_all)
 showed_data.append(mesh)

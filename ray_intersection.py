@@ -202,7 +202,7 @@ def find_projection_point_on_line(P1, P2, Q):
     return projection_point
 
 def select_faces_with_chosen_vertices(vertices, faces, chosen_vertices, loop=2):
-    selected_faces = []
+    selected_faces = np.array([])
     loop_count = 1
     list_vertices = chosen_vertices[:]
 
@@ -229,6 +229,8 @@ def select_faces_with_chosen_vertices(vertices, faces, chosen_vertices, loop=2):
                 unique_tuples = set(tuple_list)
                 selected_faces = [np.array(t) for t in unique_tuples]
 
-    selected_faces = vertices[np.array(selected_faces)]
+    
+    if len(selected_faces):
+        selected_faces = vertices[np.array(selected_faces)]
     return selected_faces
 
