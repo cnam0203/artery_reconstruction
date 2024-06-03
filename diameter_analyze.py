@@ -416,6 +416,34 @@ def side_stable_mask(arr, ratio_threshold, dif_thresh):
             
     return a, valid_mask
 
+def max_stable_mask(a, pos, ratio_threshold, distance, interval_size, dif_thresh): # thresh controls noise
+    pass_steps = int(distance/interval_size)
+    
+    left_mask = None
+    right_mask = None
+    left_radius = None
+    right_radius = None
+    mean_radius = None
+    #Left
+    if pos - 2*pass_steps >= 0:
+        left_arr = a[pos - 2*pass_steps : pos - pass_steps]
+        left_values, left_mask = side_stable_mask(left_arr, ratio_threshold, dif_thresh)
+        left_radius = np.mean(left_values[left_mask == 1])
+
+    if pos + 2*pass_steps < a.shape[0]:
+        right_arr = a[pos + pass_steps : pos + 2*pass_steps]
+        right_values, right_mask = side_stable_mask(right_arr, ratio_threshold, dif_thresh)
+        right_radius = np.mean(right_values[right_mask == 1])
+    
+    if left_radius == None and right_radius != None:
+        mean_radius = right_radius
+    elif left_radius != None and right_radius == None:
+        mean_radius = left_radius
+    elif left_radius != None and right_radius != None:
+        mean_radius = (left_radius + right_radius)/2
+    
+    return mean_radius
+
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
 segment_file_path = dataset_dir + 'BCW-1205-RES.nii.gz'
 original_file_path = dataset_dir + 'BCW-1205-RES_0000.nii.gz'
