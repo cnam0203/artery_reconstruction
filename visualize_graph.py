@@ -78,7 +78,7 @@ def generate_mesh(vertices, faces):
 
     return mesh
 
-def generate_mesh_color(vertices, faces, colors):
+def generate_mesh_color(vertices, faces, colors, title=''):
     hover_text = [f'Color: {color}' for color in colors]
     mesh = go.Mesh3d(
         x=vertices[:, 0],
@@ -91,7 +91,8 @@ def generate_mesh_color(vertices, faces, colors):
         colorscale='Viridis',
         hoverinfo='text',
         hovertext=hover_text,
-        name='Stenosis ratio'
+        name='Stenosis ratio',
+        colorbar=dict(title='Stenosis Ratio')
     )
 
     return mesh
