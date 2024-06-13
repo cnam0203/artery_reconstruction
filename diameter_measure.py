@@ -2,9 +2,10 @@ import skeletor as sk
 import nibabel as nib
 import numpy as np
 
+from collections import deque
 from skimage.morphology import skeletonize, thin
 from skimage import measure
-from scipy.ndimage import binary_dilation
+from scipy.ndimage import binary_dilation, center_of_mass
 
 from scipy.spatial import KDTree, distance_matrix
 from sklearn.cluster import DBSCAN, KMeans
@@ -23,7 +24,7 @@ import random
 
 from preprocess_data import *
 from process_graph import *
-# from visualize_graph import *
+from visualize_graph import *
 from slice_selection import *
 from visualize_mesh import *
 # from marcube import *
@@ -41,6 +42,15 @@ import vtk
 
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation as R
+
+def check_and_create_directory(dir_path):
+    # Check if the directory exists
+    if not os.path.exists(dir_path):
+        # Create the directory
+        os.makedirs(dir_path)
+        print(f"Directory '{dir_path}' created.")
+    else:
+        print(f"Directory '{dir_path}' already exists.")
 
 def split_smooth_lines(smooth_connected_lines, points, distance_threshold=2):
     new_splitted_lines = []
@@ -338,7 +348,7 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
                         intensity = intensity_slice[pos[0], pos[1]]
                         
                         # Check if the intensity is higher than the current maximum
-                        if intensity > max_intensity:
+                        if intensity > max_intensity and segment_slice[pos[0], pos[1]] == 1:
                             max_intensity = intensity
                             max_intensity_position = pos
 
@@ -352,11 +362,12 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
                         new_centerpoint = [x_start+max_intensity_position[0], y_start+max_intensity_position[1], i]
 
                     
-                    # skeleton[int(cur_point[0])][int(cur_point[1])][int(cur_point[2])] = 1
+                    skeleton[int(cur_point[0])][int(cur_point[1])][int(cur_point[2])] = 1
                     skeleton[int(new_centerpoint[0])][int(new_centerpoint[1])][int(new_centerpoint[2])] = 1
 
-                    new_points[0].append(new_centerpoint)
-                    visualize_slice(intensity_slice, segment_slice, segment_slice, [], point1[axis], new_centerpoint[axis] - point1[axis], axis)
+                    new_points[0].append([int(cur_point[0]), int(cur_point[1]), int(cur_point[2])])
+                    new_points[0].append([int(new_centerpoint[0]), int(new_centerpoint[1]), int(new_centerpoint[2])])
+                    # visualize_slice(intensity_slice, segment_slice, segment_slice, [max_intensity_position], point1[axis], new_centerpoint[axis] - point1[axis], axis)
 
 
         if line[-1] in end_points:
@@ -387,7 +398,7 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
                 intensity_slice_2d = original_data.take(i, axis=axis)
                 segment_slice_2d = processed_mask.take(i, axis=axis)
 
-                patch_size = 6
+                patch_size = 2
                 x, y, z = cur_point[0], cur_point[1], cur_point[2]    
 
                 if axis == 0:
@@ -426,7 +437,7 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
                         intensity = intensity_slice[pos[0], pos[1]]
                         
                         # Check if the intensity is higher than the current maximum
-                        if intensity > max_intensity:
+                        if intensity > max_intensity and segment_slice[pos[0], pos[1]] == 1:
                             max_intensity = intensity
                             max_intensity_position = pos
 
@@ -439,11 +450,12 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
                     else:
                         new_centerpoint = [x_start+max_intensity_position[0], y_start+max_intensity_position[1], i]
 
-                    # skeleton[int(cur_point[0])][int(cur_point[1])][int(cur_point[2])] = 1
+                    skeleton[int(cur_point[0])][int(cur_point[1])][int(cur_point[2])] = 1
                     skeleton[int(new_centerpoint[0])][int(new_centerpoint[1])][int(new_centerpoint[2])] = 1
 
-                    new_points[1].append(new_centerpoint)
-                    visualize_slice(intensity_slice, segment_slice, segment_slice, [], point1[axis], new_centerpoint[axis] - point1[axis], axis)
+                    new_points[1].append([int(cur_point[0]), int(cur_point[1]), int(cur_point[2])])
+                    new_points[1].append([int(new_centerpoint[0]), int(new_centerpoint[1]), int(new_centerpoint[2])])
+                    # visualize_slice(intensity_slice, segment_slice, segment_slice, [max_intensity_position], point1[axis], new_centerpoint[axis] - point1[axis], axis)
 
         
         indices = []
@@ -465,7 +477,7 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
 
     return new_connected_lines, skeleton, skeleton_points_1
 
-def remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines):
+def remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, len_threshold=10):
     
     is_first = 0
     count = 0
@@ -478,7 +490,7 @@ def remove_short_branch(skeleton, skeleton_points, end_points, junction_points, 
         # print('1. ', connected_lines, end_points, junction_points)
 
         for line in connected_lines:
-            if len(line) <= 10 and ((line[0] in end_points) or (line[-1] in end_points)):
+            if len(line) <= len_threshold and ((line[0] in end_points) or (line[-1] in end_points)):
                 count += 1
                 for point in line:
                     if point not in junction_points:
@@ -566,9 +578,263 @@ def remove_short_branch(skeleton, skeleton_points, end_points, junction_points, 
                     junction_points.append(idx)
 
         connected_lines = new_connected_lines
-
-    print(len(new_connected_lines), new_connected_lines)        
+    
     return skeleton, new_connected_lines, end_points, junction_points
+
+def extend_branch(branch_idx, point_idx, remove_list, add_list, connected_lines, points, voxel_sizes):
+    considered_lines = []
+    extended_line = connected_lines[branch_idx]
+
+    for idx, line in enumerate(connected_lines):
+        if idx in remove_list or idx in add_list:
+            continue
+        else:
+            if line[0] == extended_line[point_idx] or line[-1] == extended_line[point_idx]:
+                considered_lines.append(idx)
+
+    if len(considered_lines) == 0:
+        return remove_list, add_list
+    else:
+        max_angle = 0
+        max_idx = None
+        max_head = None
+        max_weighted_len = None
+
+        if point_idx == 0:
+            vector_1 = (points[extended_line[1]] - points[extended_line[0]])*voxel_sizes
+        else:
+            vector_1 = (points[extended_line[-2]] - points[extended_line[-1]])*voxel_sizes
+
+        for idx in considered_lines:
+            considered_line = connected_lines[idx]
+
+            if considered_line[0] == extended_line[point_idx]:
+                vector_2 = points[considered_line[1]] - points[considered_line[0]]
+                result_head = extend_list(idx, connected_lines, -1, points, voxel_sizes)
+                head = -1
+            else:
+                vector_2 = points[considered_line[-2]] - points[considered_line[-1]]
+                result_head = extend_list(idx, connected_lines, 0, points, voxel_sizes)
+                head = 0
+
+            cos_theta = np.dot(vector_1, vector_2)/(np.linalg.norm(vector_1)*np.linalg.norm(vector_2))
+            # Compute the angle in radians
+            theta_radians = np.arccos(cos_theta)
+            angle = np.degrees(theta_radians)
+
+            print('Line ', branch_idx, angle, idx, find_actual_length(result_head, points, voxel_sizes))
+
+            if max_idx == None:
+                max_angle = angle
+                max_idx = idx
+                max_head = head
+                max_weighted_len = find_actual_length(result_head, points, voxel_sizes)
+            elif (find_actual_length(result_head, points, voxel_sizes) > 1.2*max_weighted_len):
+                max_angle = angle
+                max_idx = idx
+                max_head = head
+                max_weighted_len = find_actual_length(result_head, points, voxel_sizes)
+            elif (angle > max_angle + 2):
+                max_angle = angle
+                max_idx = idx
+                max_head = head
+                max_weighted_len = find_actual_length(result_head, points, voxel_sizes)
+            elif angle >= max_angle - 20 and angle <= max_angle + 20: 
+                if find_actual_length(result_head, points, voxel_sizes) > max_weighted_len+10:
+                    max_angle = angle
+                    max_idx = idx
+                    max_head = head
+                    max_weighted_len = find_actual_length(result_head, points, voxel_sizes)
+                else:
+                    if len(considered_line) > 1.5*len(connected_lines[max_idx]):
+                        max_angle = angle
+                        max_idx = idx
+                        max_head = head
+                        max_weighted_len = find_actual_length(result_head, points, voxel_sizes)
+
+            print('Line ', branch_idx, max_idx)
+
+        add_list.append(max_idx)
+        for idx in considered_lines:
+            if idx != max_idx:
+                remove_list.append(idx)
+
+        print(add_list, remove_list, len(connected_lines))
+        return extend_branch(max_idx, max_head, remove_list, add_list, connected_lines, points, voxel_sizes)
+
+def find_actual_length(list_points, points, voxel_sizes):
+    length = 0
+    for i in range(len(list(list_points))-1):
+        length += euclidean_distance(points[list_points[i]]*voxel_sizes, points[list_points[i+1]]*voxel_sizes)
+
+    return length
+
+def extend_list(start_list_idx, list_of_lists, extend_at, points, voxel_sizes):
+    def recursive_extend(current_list, current_used_indices, current_point, extend_at):
+        longest_extension = list(current_list)
+        
+        for i, lst in enumerate(list_of_lists):
+            if i in current_used_indices:
+                continue
+            
+            if extend_at == 0:  # extend at head
+                if lst[-1] == current_point:
+                    new_list = deque(current_list)
+                    new_list.extendleft(reversed(lst[:-1]))
+                    new_used_indices = current_used_indices.copy()
+                    new_used_indices.add(i)
+                    extended_list = recursive_extend(new_list, new_used_indices, new_list[0], extend_at)
+                    if find_actual_length(extended_list, points, voxel_sizes) > find_actual_length(longest_extension, points, voxel_sizes):
+                        longest_extension = extended_list
+                elif lst[0] == current_point:
+                    new_list = deque(current_list)
+                    new_list.extendleft(lst[1:])
+                    new_used_indices = current_used_indices.copy()
+                    new_used_indices.add(i)
+                    extended_list = recursive_extend(new_list, new_used_indices, new_list[0], extend_at)
+                    if find_actual_length(extended_list, points, voxel_sizes) > find_actual_length(longest_extension, points, voxel_sizes):
+                        longest_extension = extended_list
+            else:  # extend at tail
+                if lst[0] == current_point:
+                    new_list = deque(current_list)
+                    new_list.extend(lst[1:])
+                    new_used_indices = current_used_indices.copy()
+                    new_used_indices.add(i)
+                    extended_list = recursive_extend(new_list, new_used_indices, new_list[-1], extend_at)
+                    if find_actual_length(extended_list, points, voxel_sizes) > find_actual_length(longest_extension, points, voxel_sizes):
+                        longest_extension = extended_list
+                elif lst[-1] == current_point:
+                    new_list = deque(current_list)
+                    new_list.extend(reversed(lst[:-1]))
+                    new_used_indices = current_used_indices.copy()
+                    new_used_indices.add(i)
+                    extended_list = recursive_extend(new_list, new_used_indices, new_list[-1], extend_at)
+                    if find_actual_length(extended_list, points, voxel_sizes) > find_actual_length(longest_extension, points, voxel_sizes):
+                        longest_extension = extended_list
+        
+        return longest_extension
+
+    # Initialize the starting list and the set of used indices
+    start_list = list_of_lists[start_list_idx]
+    extended_list = deque(start_list)
+    used_indices = set()
+    used_indices.add(start_list_idx)
+
+    # Determine the current point to start extension
+    if extend_at == 0:
+        current_point = extended_list[0]
+    else:
+        current_point = extended_list[-1]
+
+    # Find the longest extension
+    longest_extended_list = recursive_extend(extended_list, used_indices, current_point, extend_at)
+    return list(longest_extended_list)
+
+def remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes, len_threshold=10):
+    remove_list = []
+    add_list = []
+    
+    max_length = 0
+    max_index = None
+
+    for idx, line in enumerate(connected_lines):
+        if len(line) > max_length:
+            max_length = len(line)
+            max_index = idx
+    
+    add_list.append(max_index)
+
+    remove_list, add_list = extend_branch(max_index, 0, remove_list, add_list, connected_lines, skeleton_points, voxel_sizes)
+    remove_list, add_list = extend_branch(max_index, -1, remove_list, add_list, connected_lines, skeleton_points, voxel_sizes)
+    new_connected_lines = [line for idx, line in enumerate(connected_lines) if idx in add_list]
+
+    points = []
+    for line in new_connected_lines:
+        points += line
+    points = list(set(points))
+    positions = skeleton_points[points]
+
+    array_3d = np.zeros(skeleton.shape, dtype=int)
+    array_3d[positions[:, 0], positions[:, 1], positions[:, 2]] = 1
+
+    end_points = []
+    junction_points = []
+
+    is_end = False
+    
+    while not is_end:
+        is_end = True
+        point_count = {}
+
+        for idx, line in enumerate(new_connected_lines):
+            if line[0] not in point_count:
+                point_count[line[0]] = []
+            if line[-1] not in point_count:
+                point_count[line[-1]] = []
+            
+            point_count[line[0]].append(idx)
+            point_count[line[-1]].append(idx)
+
+        merge_point = None
+        
+        for idx in point_count:
+            if len(point_count[idx]) == 2:
+                line_idx_1 = point_count[idx][0]
+                line_idx_2 = point_count[idx][1]
+                line_1 = new_connected_lines[line_idx_1]
+                line_2 = new_connected_lines[line_idx_2]
+
+                new_line = []
+                new_lines = []
+                reversed_line_2 = line_2[::-1]
+
+                if line_1[0] == line_2[0] and line_1[-1] != line_2[-1]:
+                    new_line = reversed_line_2[:-1] + line_1
+                    is_end = False
+                elif line_1[0] == line_2[-1] and line_1[-1] != line_2[0]:
+                    new_line = line_2[:-1] + line_1
+                    is_end = False
+                elif line_1[-1] == line_2[0] and line_1[0] != line_2[-1]:
+                    new_line = line_1[:-1] + line_2
+                    is_end = False
+                elif line_1[-1] == line_2[-1] and line_1[0] != line_2[0]:
+                    new_line = line_1[:-1] + reversed_line_2
+                    is_end = False
+
+                if not is_end:
+                    for idx_p, line in enumerate(new_connected_lines):
+                        if idx_p not in point_count[idx]:
+                            new_lines.append(line)
+                    
+                    # print('Avant:', len(new_connected_lines))
+                    # print(new_connected_lines)
+                    new_lines.append(new_line)
+                    new_connected_lines = new_lines
+                    # print('Après:', len(new_connected_lines))
+                    # print(new_connected_lines)
+                    break
+        
+        end_points = []
+        junction_points = []
+        point_count = {}
+
+        for idx, line in enumerate(new_connected_lines):
+            if line[0] not in point_count:
+                point_count[line[0]] = []
+            if line[-1] not in point_count:
+                point_count[line[-1]] = []
+            
+            point_count[line[0]].append(idx)
+            point_count[line[-1]].append(idx)
+
+
+        for idx in point_count:
+            if len(point_count[idx]) == 1:
+                end_points.append(idx)
+            else:
+                junction_points.append(idx)
+
+    return array_3d, new_connected_lines, end_points, junction_points
 
 def angle_between_lines(point1, point2, point3):
     # Calculate direction vectors of the two lines
@@ -724,393 +990,82 @@ def perpendicular_planes(point1, point2):
     return v1, v2
 
 # Initialize
+sub_nums = [25]
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
-segment_file_path = dataset_dir + 'BCW-1205-RES.nii.gz'
-original_file_path = dataset_dir + 'BCW-1205-RES_0000.nii.gz'
-sub_num = 'BCW-1205-RES'
-# segment_file_path = dataset_dir + 'sub-581_run-1_mra_eICAB_CW.nii.gz'
-# original_file_path = dataset_dir + 'sub-581_run-1_mra_resampled.nii.gz'
-# centerline_file_path = dataset_dir + 'sub-9_run-1_mra_CircleOfWillis_centerline.nii.gz'
 
-segment_image = nib.load(segment_file_path)
-original_image = nib.load(original_file_path)
-# centerline_image = nib.load(centerline_file_path)
-
-intensity_threshold_1 = 0.1
-intensity_threshold_2 = 0.1
-gaussian_sigma=2
-distance_threshold=20
-laplacian_iter = 5
-neighbor_threshold_1 = 10
-neighbor_threshold_2 = neighbor_threshold_1 + 10
-resolution = 0.05
-
-original_data = original_image.get_fdata()
-segment_data = segment_image.get_fdata()
-# centerline_data = centerline_image.get_fdata()
-voxel_sizes = segment_image.header.get_zooms()
-info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/'
-
-for artery_index in [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
-    print('Aryery ', artery_index)
-    ## For treated kising vessels
-    # processed_mask = segment_data
-
-    ## For untreated kissing vessels
-    # processed_mask = find_skeleton_ica(segment_image, original_image, 1 , 0.5, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
-    # processed_mask = remove_noisy_voxels(processed_mask, neighbor_threshold_1, True)
-
-    # For normal artery
-    processed_mask, cf_mask, surf_data = preprocess_data(original_data, segment_data, [artery_index], intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
-
-
-    # Extract smooth centerline
-    skeleton = skeletonize(processed_mask)
-    skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
-    skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines)
-    # connected_lines, skeleton, skeleton_points = extend_skeleton(connected_lines, end_points, skeleton_points, original_data, processed_mask, skeleton, voxel_sizes)
-
-    vertices, faces, normals, values = measure.marching_cubes(skeleton, level=0.5, spacing=voxel_sizes)
-    skeleton_points = voxel_sizes*(skeleton_points+0.5)
-
-    vmtk_skeleton_vertices, vmtk_skeleton_faces = vmtk_smooth_mesh(vertices, faces, 2000)
-    smooth_points, smooth_connected_lines = smooth_centerline(vmtk_skeleton_vertices, skeleton_points, connected_lines)
-
-    # Extract boundary
-    vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
-    vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 20, 1)
-
-
-
-    np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
-    np.savetxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')
-    np.savetxt(info_dir + f'vmtk_boundary_faces_{artery_index}.txt', vmtk_boundary_faces, delimiter=',', fmt='%.2f')
-    with open(info_dir + f'smooth_connected_lines_{artery_index}.json', 'w') as file:
-        json.dump(smooth_connected_lines, file)  # indent=4 makes the file more readable
-
-# # Calculate distance
-# distance_threshold = 0.5
-# new_splitted_lines, points_values, splitted_branches = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
-# ring_vertices, removed_vertices, intersection_points, radiuses, all_surfaces = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
-
-# cur_branch = splitted_branches[0]
-# cur_pos = 0
-# branches = [[]]
-# line_traces = []
-
-# for idx, ring in enumerate(ring_vertices):
-#     interval_radius = radiuses[idx]
-
-#     # if len(interval_radius):
-#     #     line_traces.append(generate_lines(np.array(interval_radius), 2))
-
-#     if splitted_branches[idx] != cur_branch:
-#         cur_pos = 0
-#         cur_branch = splitted_branches[idx]
-#         branches.append([])
-
-#     if cur_pos == 0:
-#         print("Branch ", cur_branch)
-    
-#     if len(interval_radius):
-#         print(f"""At {cur_pos}: """, euclidean_distance(interval_radius[0], interval_radius[1]), ' mm')
-#         branches[-1].append(euclidean_distance(interval_radius[0], interval_radius[1]))
-
-#     cur_pos += distance_threshold
-
-# longest_branch = None
-# longest_length = 0
-# for idx, branch in enumerate(branches):
-#     np_branch = np.array(branch)
-
-#     if len(branch) > longest_length:
-#         longest_length = len(branch)
-#         longest_branch = idx
-
-#     percentile_25 = np.percentile(np_branch, 25)
-#     percentile_45 = np.percentile(np_branch, 45)
-#     percentile_50 = np.percentile(np_branch, 50)
-#     percentile_55 = np.percentile(np_branch, 55)
-#     percentile_75 = np.percentile(np_branch, 75)
-#     selected_range = np_branch[(np_branch >= percentile_25) & (np_branch <= percentile_75)]
-
-#     # print('Branch ', idx, ':')
-#     # print("0th: ", np.min(np_branch))
-#     # print("25th: ", percentile_25)
-#     # print("45th: ", percentile_45)
-#     # print("50th: ", percentile_50)
-#     # print("55th: ", percentile_55)
-#     # print("75th: ", percentile_75)
-#     # print("100th: ", np.max(np_branch))
-#     print("Min radius at half the length: ", branch[int(len(branch)/2)])
-#     # print("Avg min radius (range 25th-75th): ", np.mean(selected_range))
-#     # print("Avg min radius (range 0th-100th): ", np.mean(np_branch))
-
-# max_branch_pos = [idx for idx, value in enumerate(splitted_branches) if value == longest_branch]
-# ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if idx in max_branch_pos]
-# middle_ring = ring_vertices[int(len(ring_vertices)/2)]
-
-# middle_surface_points = vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]]
-# middle_intersection_points = intersection_points[int(len(intersection_points)/2)]
-
-# sum_distance = []
-# for idx, point in enumerate(middle_surface_points):
-#     sum_distance.append(euclidean_distance(point, middle_intersection_points[idx]))
-
-# mean_radius = sum(sum_distance)/len(sum_distance)
-# print("Average radius at half the length: ", mean_radius)
-
-# # tree = KDTree(smooth_points)
-# # distances, indices = tree.query(vmtk_boundary_vertices, k=1)
-
-# # mesh = go.Mesh3d(
-# #     x=vmtk_boundary_vertices[:, 0],
-# #     y=vmtk_boundary_vertices[:, 1],
-# #     z=vmtk_boundary_vertices[:, 2],
-# #     i=vmtk_boundary_faces[:, 0],
-# #     j=vmtk_boundary_faces[:, 1],
-# #     k=vmtk_boundary_faces[:, 2],
-# #     intensity=distances,
-# #     colorscale='hot',
-# #     # intensity=distances,
-# #     # colorscale='plasma',
-# #     colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
-# #     hoverinfo='text',
-# #     text=distances
-# # )
-
-# # # Create the figure
-# # fig = go.Figure(data=[mesh])
-
-# # # Update layout
-# # fig.update_layout(scene=dict(
-# #                     aspectmode='manual',
-# #                     xaxis = dict(visible=False),
-# #                     yaxis = dict(visible=False),
-# #                     zaxis =dict(visible=False)
-# #                     ),
-# #                     title='Mesh Surface Color Map'
-# #                 )
-
-# # # Show the plot
-# # fig.show()
-
-
-# # visualized_smooth_points = []
-# # visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
-# # for line in smooth_connected_lines:
-# #     visualized_smooth_points.append(generate_points(smooth_points[line], 2))
-
-# # # visualized_start_points = []
-# # # visualized_end_points = []
-
-# # # # for line in smooth_connected_lines:
-# # # #     visualized_start_points.append(generate_points(smooth_points[line[0:1]], 5, 'red'))
-# # # #     visualized_end_points.append(generate_points(smooth_points[line[-1:]], 5, 'green'))
-
-
-# # unique_vertices = {}
-
-# # for ring_vertice in ring_vertices:
-# #     for point in ring_vertice:
-# #         if point[0] not in unique_vertices:
-# #             unique_vertices[point[0]] = point[1]
-# #         else:
-# #             distance_1 = euclidean_distance(vmtk_boundary_vertices[point[0]], unique_vertices[point[0]])
-# #             distance_2 = euclidean_distance(vmtk_boundary_vertices[point[0]], point[1])
-
-# #             if distance_2 < distance_1:
-# #                 unique_vertices[point[0]] = point[1]
-
-
-# # not_exist_vertices = []
-# # for i in range(vmtk_boundary_vertices.shape[0]):
-# #     if i not in unique_vertices:
-# #         not_exist_vertices.append(i)
-
-# # exist_vertices = [index for index in unique_vertices]
-
-# # tree = KDTree(vmtk_boundary_vertices[exist_vertices])
-# # distances, indices = tree.query(vmtk_boundary_vertices[not_exist_vertices], k=1)
-
-# # for idx, index in enumerate(indices):
-# #     unique_vertices[not_exist_vertices[idx]] = unique_vertices[exist_vertices[index]]
-
-# # distances = []
-
-# # for i in range(vmtk_boundary_vertices.shape[0]):
-# #     mean_distance = euclidean_distance(vmtk_boundary_vertices[i], unique_vertices[i])
-# #     distances.append(mean_distance)
-
-
-# # mesh = go.Mesh3d(
-# #     x=vmtk_boundary_vertices[:, 0],
-# #     y=vmtk_boundary_vertices[:, 1],
-# #     z=vmtk_boundary_vertices[:, 2],
-# #     i=vmtk_boundary_faces[:, 0],
-# #     j=vmtk_boundary_faces[:, 1],
-# #     k=vmtk_boundary_faces[:, 2],
-# #     intensity=distances,
-# #     colorscale='hot',
-# #     # intensity=distances,
-# #     # colorscale='plasma',
-# #     colorbar=dict(title='Distance to centerline (mm)', tickvals=[np.min(distances), np.mean(distances), np.max(distances)]),
-# #     hoverinfo='text',
-# #     text=distances
-# # )
-
-# # # Create the figure
-# # fig = go.Figure(data=[mesh])
-
-# # # Update layout
-# # fig.update_layout(scene=dict(
-# #                     aspectmode='manual',
-# #                     xaxis = dict(visible=False),
-# #                     yaxis = dict(visible=False),
-# #                     zaxis =dict(visible=False)
-# #                     ),
-# #                     title='Mesh Surface Color Map'
-# #                 )
-
-# # # Show the plot
-# # fig.show()
-# # # # # ranges = [[10, 15], [30, 35], [40, 45], [50, 55]]
-
-# # # # # # # visualized_boundary_points = []
-# # # # # # # visualized_removed_points = []
-
-# # # # # # # Visualize centerline
-# # # # line_traces = []
-# # # # meshes = []
-# # # # meshes = generate_mesh(vmtk_boundary_vertices, vmtk_boundary_faces)
-
-# # # # for line in connected_lines:
-# # # #     line_traces.append(generate_lines(skeleton_points[line], 5, 'red'))
-
-# # # # # for group_surfaces in interval_surfaces:
-
-# # # # # cur_branch = splitted_branches[0]
-# # # # # cur_pos = 0
-# # # # # branches = [[]]
-
-# # # # # for idx, ring in enumerate(ring_vertices):
-# # # # #     interval_radius = radiuses[idx]
-
-# # # # #     if len(interval_radius):
-# # # # #         line_traces.append(generate_lines(np.array(interval_radius), 2))
-
-# # # # #     if splitted_branches[idx] != cur_branch:
-# # # # #         cur_pos = 0
-# # # # #         cur_branch = splitted_branches[idx]
-# # # # #         branches.append([])
-
-# # # # #     if cur_pos == 0:
-# # # # #         print("Branch ", cur_branch)
-    
-# # # # #     if len(interval_radius):
-# # # # #         print(f"""At {cur_pos}: """, euclidean_distance(interval_radius[0], interval_radius[1]), ' mm')
-# # # # #         branches[-1].append(euclidean_distance(interval_radius[0], interval_radius[1]))
-
-# # # # #     cur_pos += distance_threshold
-
-
-# # # # # longest_branch = None
-# # # # # longest_length = 0
-# # # # # for idx, branch in enumerate(branches):
-# # # # #     np_branch = np.array(branch)
-
-# # # # #     if len(branch) > longest_length:
-# # # # #         longest_length = len(branch)
-# # # # #         longest_branch = idx
-
-# # # # #     percentile_25 = np.percentile(np_branch, 25)
-# # # # #     percentile_45 = np.percentile(np_branch, 45)
-# # # # #     percentile_50 = np.percentile(np_branch, 50)
-# # # # #     percentile_55 = np.percentile(np_branch, 55)
-# # # # #     percentile_75 = np.percentile(np_branch, 75)
-# # # # #     selected_range = np_branch[(np_branch >= percentile_25) & (np_branch <= percentile_75)]
-
-# # # # #     print('Branch ', idx, ':')
-# # # # #     print("0th: ", np.min(np_branch))
-# # # # #     print("25th: ", percentile_25)
-# # # # #     print("45th: ", percentile_45)
-# # # # #     print("50th: ", percentile_50)
-# # # # #     print("55th: ", percentile_55)
-# # # # #     print("75th: ", percentile_75)
-# # # # #     print("100th: ", np.max(np_branch))
-# # # # #     print("Min radius at half the length: ", branch[int(len(branch)/2)])
-# # # # #     print("Avg min radius (range 25th-75th): ", np.mean(selected_range))
-# # # # #     print("Avg min radius (range 0th-100th): ", np.mean(np_branch))
-
-
-# # # # # max_branch_pos = [idx for idx, value in enumerate(splitted_branches) if value == longest_branch]
-# # # # # ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if idx in max_branch_pos]
-# # # # # middle_ring = ring_vertices[int(len(ring_vertices)/2)]
-
-# # # # # middle_surface_points = vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]]
-# # # # # middle_intersection_points = intersection_points[int(len(intersection_points)/2)]
-
-# # # # # sum_distance = []
-# # # # # for idx, point in enumerate(middle_surface_points):
-# # # # #     sum_distance.append(euclidean_distance(point, middle_intersection_points[idx]))
-
-# # # # # mean_radius = sum(sum_distance)/len(sum_distance)
-# # # # # print("Average radius at half the length: ", mean_radius)
-
-# # # # visualized_ring_points = []
-# # # # # visualized_ring_points = generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in middle_ring]], 3, 'red')
-
-# # # # # # for interval in ranges:
-# # # # # #     line_traces = []
-# # # # # #     visualized_boundary_points = []
-# # # # # #     visualized_removed_points = []
-# # # # # #     visualized_inter_points = []
-
-# # # # # #     interval_rings = ring_vertices[interval[0]:interval[1]]
-# # # # # #     interval_removed_rings = removed_vertices[interval[0]:interval[1]]
-# # # # # #     interval_radiuses = radiuses[interval[0]:interval[1]]
-# # # # # #     interval_surfaces = all_surfaces[interval[0]:interval[1]]
-
-# # # # # #     for ring in interval_rings:
-# # # # # #         visualized_boundary_points.append(generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in ring]], 3, 'blue'))
-
-# # # # # #         # for vert in ring:
-# # # # # #         #     if euclidean_distance(vmtk_boundary_vertices[vert[0]], vert[1]) > 3:
-# # # # # #         #         line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 1, 'red'))
-
-# # # # # #     for ring in interval_removed_rings:
-# # # # # #         if len(ring) > 0:
-# # # # # #             visualized_removed_points.append(generate_points(vmtk_boundary_vertices[[sublist[0] for sublist in ring]], 3, 'orange'))
-# # # # # #             # visualized_inter_points.append(generate_points(np.array([sublist[2] for sublist in ring]), 3, 'red'))
-
-# # # # # #             # for vert in ring:
-# # # # # #             #     if euclidean_distance(vmtk_boundary_vertices[vert[0]], vert[1]) > 3:
-# # # # # #             #         line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 1, 'red'))
-# # # # # #             # for vert in ring:
-# # # # # #             #     line_traces.append(generate_lines(np.array([vmtk_boundary_vertices[vert[0]], vert[1]]), 1))
-    
-# # # # # #     # for radius in interval_radiuses:
-# # # # # #     #     line_traces.append(generate_lines(np.array(radius), 2))
-
-# # # # # #     # for group_surfaces in interval_surfaces:
-# # # # # #     #     for surface in group_surfaces:
-# # # # # #     #         line_traces.append(generate_lines(np.array([surface[0], surface[1]]), 2))
-# # # # # #     #         line_traces.append(generate_lines(np.array([surface[1], surface[2]]), 2))
-# # # # # #     #         line_traces.append(generate_lines(np.array([surface[0], surface[2]]), 2))
-
-# # # # # #     show_figure(line_traces + visualized_boundary_points + visualized_removed_points + visualized_inter_points)
-
-
-# # # # # # # # for idx, line in enumerate(new_splitted_lines):
-# # # # # # # #     line_traces.append(generate_lines(smooth_points[line], 2))
-# # # # # # # visualized_boundary_points = generate_points(vmtk_boundary_vertices, 1, 'blue')
-# # # # # # # visualized_smooth_points = generate_points_values(smooth_points, 1, 'green', points_values)
-# # # # # # # visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
-
-# # # # # # # # print(line_traces)
-# # # # # # # # print(visualized_boundary_points)
-# # # # # # # # print(visualized_smooth_points)
-
-# # show_figure([visualized_boundary_points] +  visualized_smooth_points)
-
-# # # # show_figure([meshes] + line_traces + visualized_smooth_points)
+for sub_num in sub_nums:
+    segment_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_eICAB_CW.nii.gz'
+    original_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_resampled.nii.gz'
+    # segment_file_path = dataset_dir + 'sub-581_run-1_mra_eICAB_CW.nii.gz'
+    # original_file_path = dataset_dir + 'sub-581_run-1_mra_resampled.nii.gz'
+    # centerline_file_path = dataset_dir + 'sub-9_run-1_mra_CircleOfWillis_centerline.nii.gz'
+
+    segment_image = nib.load(segment_file_path)
+    original_image = nib.load(original_file_path)
+    # centerline_image = nib.load(centerline_file_path)
+
+    intensity_threshold_1 = 0.1
+    intensity_threshold_2 = 0.1
+    gaussian_sigma=2
+    distance_threshold=20
+    laplacian_iter = 5
+    neighbor_threshold_1 = 10
+    neighbor_threshold_2 = neighbor_threshold_1 + 10
+    resolution = 0.05
+    len_threshold = 15
+
+    original_data = original_image.get_fdata()
+    segment_data = segment_image.get_fdata()
+    # centerline_data = centerline_image.get_fdata()
+    voxel_sizes = segment_image.header.get_zooms()
+    info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + str(sub_num) + '/'
+    check_and_create_directory(info_dir)
+
+    for artery_index in [1, 2]:
+        print('Artery ', artery_index)
+        ## For treated kising vessels
+        # processed_mask = segment_data
+
+        ## For untreated kissing vessels
+        if artery_index in [1, 2]:
+            processed_mask = find_skeleton_ica(segment_image, original_image, artery_index , 0.6, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
+            processed_mask = remove_noisy_voxels(processed_mask, neighbor_threshold_1, True)
+        else:
+            # For normal artery
+            processed_mask, cf_mask, surf_data = preprocess_data(original_data, segment_data, [artery_index], intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
+
+
+        # Extract smooth centerline
+        skeleton = skeletonize(processed_mask)
+        skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
+        skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, len_threshold)
+        skeleton, connected_lines, end_points, junction_points = remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes, len_threshold)
+        connected_lines, skeleton, skeleton_points = extend_skeleton(connected_lines, end_points, skeleton_points, original_data, processed_mask, skeleton, voxel_sizes)
+        
+        vertices, faces, normals, values = measure.marching_cubes(skeleton, level=0.5, spacing=voxel_sizes)
+        skeleton_points = voxel_sizes*(skeleton_points+0.5)
+        visualized_boundary_points = generate_points(vertices, 1, 'blue')
+
+        line_traces = []
+        for line in connected_lines:
+            for idx in range(len(line)-1):
+                line_traces.append(generate_lines(np.array([skeleton_points[line[idx]], skeleton_points[line[idx+1]]]), 2))
+
+        vmtk_skeleton_vertices, vmtk_skeleton_faces = vmtk_smooth_mesh(vertices, faces, 2000)
+        smooth_points, smooth_connected_lines = smooth_centerline(vmtk_skeleton_vertices, skeleton_points, connected_lines)
+
+        # Extract boundary
+        vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
+        vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 20, 1)
+
+        np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
+        np.savetxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')
+        np.savetxt(info_dir + f'vmtk_boundary_faces_{artery_index}.txt', vmtk_boundary_faces, delimiter=',', fmt='%.2f')
+        with open(info_dir + f'smooth_connected_lines_{artery_index}.json', 'w') as file:
+            json.dump(smooth_connected_lines, file)  # indent=4 makes the file more readable
+
+
+        
+        visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
+
+        show_figure([visualized_boundary_points, visualized_skeleton_points]+line_traces)

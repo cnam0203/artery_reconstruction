@@ -12,7 +12,7 @@ from scipy.ndimage import gaussian_filter
 from sklearn.cluster import DBSCAN
 from preprocess_data import *
 from process_graph import *
-# from visualize_graph import *
+from visualize_graph import *
 
 # Nearest neighbor algorithm
 def nearest_neighbor(points):
@@ -230,6 +230,14 @@ def find_skeleton_ica(segment_image, original_image=None, index=None, intensity_
 
     skeleton = skeletonize(cex_data)
     skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
+
+    visualized_thin_points = generate_points(skeleton_points, 2, 'green')
+
+    show_figure([
+                visualized_thin_points,
+            ] 
+    )
+
     neighbor_distances = {}
 
     # Initialize neighbor distances for all points
@@ -386,7 +394,7 @@ def find_skeleton_ica(segment_image, original_image=None, index=None, intensity_
     for point in touch_points:
         surf_data[point[0]][point[1]][point[2]] = 0
 
-    visualized_thin_points = generate_points(center_points, 2, 'green')
+    # visualized_thin_points = generate_points(center_points, 2, 'green')
 
     # show_figure([
     #             visualized_thin_points,

@@ -320,7 +320,6 @@ def find_middle_point(point_1_idx, point_2_idx, rest_points, points_2d, distance
     min_dist = 100000
     nearest_point = None
     
-    print(point_1, point_2, distance)
     for idx in rest_points:
         point = points_2d[idx]
         projection_point = point_on_line(point_1, point_2, point)
@@ -469,9 +468,10 @@ def find_longest_branch(splitted_branches):
 
     return most_common_number
 
+sub_num = '25'
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
-segment_file_path = dataset_dir + 'BCW-1205-RES.nii.gz'
-original_file_path = dataset_dir + 'BCW-1205-RES_0000.nii.gz'
+segment_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_eICAB_CW.nii.gz'
+original_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_resampled.nii.gz'
 
 segment_image = nib.load(segment_file_path)
 original_image = nib.load(original_file_path)
@@ -480,16 +480,22 @@ original_data = original_image.get_fdata()
 segment_data = segment_image.get_fdata()
 voxel_sizes = segment_image.header.get_zooms()
 info = {}
-sub_num = 'BCW-1205-RES'
-info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/'
+info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + str(sub_num) + '/'
 showed_data = []
 
 vmtk_boundary_vertices_all = []
 vmtk_boundary_faces_all = []
 stenosis_ratios_all = []
 vert_num = 0
-chosen_arteries = [2]
-# chosen_arteries = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+line_traces = []
+end_points = []
+start_points = [] 
+middle_points = []
+cons_points = []
+chosen_arteries = [1]
+cen_points = []
+cen_values = []
+chosen_arteries = [1, 2]
 
 for artery_index in chosen_arteries:
     artery_key = "Artery_" + str(artery_index)
@@ -508,10 +514,15 @@ for artery_index in chosen_arteries:
     distance_threshold = 0.5
     new_splitted_lines, points_values, splitted_branches = artery_analyse(vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
     ring_vertices, centerpoints, vertex_ring = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
-
     longest_branch_idx = find_longest_branch(splitted_branches)
     chosen_ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if splitted_branches[idx] == longest_branch_idx]
     chosen_centerpoints = [centerpoint for idx, centerpoint in enumerate(centerpoints) if splitted_branches[idx] == longest_branch_idx]
+    start_points.append(chosen_centerpoints[0])
+    end_points.append(chosen_centerpoints[-1])
+    middle_points.append(chosen_centerpoints[int(len(chosen_centerpoints)/2)])
+    cons_points.append(chosen_centerpoints[int(len(chosen_centerpoints)/4)])
+    cons_points.append(chosen_centerpoints[int(3*len(chosen_centerpoints)/4)])
+    cen_points += chosen_centerpoints
 
     min_distances = []
     avg_distances = []
@@ -556,14 +567,12 @@ for artery_index in chosen_arteries:
         if len(undefined_ranges):
             is_stop = False
 
-    
-    print(avg_distances, min_distances)
     ref_min_distances = []
     ref_avg_distances = []
 
     for i in range(len(chosen_ring_vertices)):
         ratio_threshold = 0.1
-        distance = 5
+        distance = (1/10)*len(chosen_ring_vertices)*distance_threshold
         interval_size = distance_threshold
         dif_thresh = 0.5*avg_distances[i]
 
@@ -595,7 +604,6 @@ for artery_index in chosen_arteries:
         if len(undefined_ranges):
             is_stop = False
 
-    print(ref_avg_distances, ref_min_distances)
     ratios = []
     for idx, point in enumerate(vmtk_boundary_vertices):
         ring_idx = vertex_ring[idx]
@@ -605,18 +613,105 @@ for artery_index in chosen_arteries:
         
         if ratio > 1:
             ratio = 1
-        ratios.append((1-ratio)*100)
+        ratios.append(ratio*100)
 
-    # x_values = [i*distance_threshold for i in range(len(chosen_ring_vertices))]
+    stenosis_ratio_min = np.array(min_distances)/np.array(ref_min_distances)
+    stenosis_ratio_min[stenosis_ratio_min > 1] = 1
+    stenosis_ratio_min = 1 - stenosis_ratio_min
+    stenosis_ratio_min_squared = stenosis_ratio_min**2
+    stenosis_ratio_min_squared_fd = np.gradient(stenosis_ratio_min_squared)
+    stenosis_ratio_min_squared_sd = np.gradient(stenosis_ratio_min_squared_fd)
+    stenosis_min_squared_fd = np.gradient(np.array(min_distances))
+    stenosis_min_squared_sd = np.gradient(stenosis_min_squared_fd)
+    stenosis_ratio_avg = np.array(avg_distances)/np.array(ref_avg_distances)
+    stenosis_ratio_avg[stenosis_ratio_avg > 1] = 1
+    stenosis_ratio_avg = 1 - stenosis_ratio_avg
+    stenosis_ratio_avg_squared = stenosis_ratio_avg**2
+    stenosis_ratio_avg_squared_fd = np.gradient(stenosis_ratio_avg_squared)
+    stenosis_ratio_avg_squared_sd = np.gradient(stenosis_ratio_avg_squared_fd)
+    stenosis_ratio_avg_squared_fd = np.gradient(stenosis_ratio_avg_squared)
+    
+    circle_positions = [0, 0.25, 0.5, 0.75, 1]  # Example circle positions
+    circle_colors = ['blue', 'green', 'yellow', 'green', 'red']  # Colors for the circles
+
+    x_values = [i*distance_threshold for i in range(len(chosen_ring_vertices))]
+    cen_values += x_values
     # plt.figure(figsize=(np.max(np.array(x_values)), np.max(np.array(avg_distances))))
-    # plt.plot(x_values, np.array(min_distances), label='Min distances')
-    # plt.plot(x_values, np.array(avg_distances), label='Avg distances')
-    # plt.plot(x_values, np.array(ref_min_distances), label='Ref Min distances')
-    # plt.plot(x_values, np.array(ref_avg_distances), label='Ref Avg distances')
-    # plt.xlabel('Length (mm)')
-    # plt.title('Change in vascular geometry')
-    # plt.legend()  # Show legend with labels
+    plt.figure()
+    plt.subplot(4, 1, 1)  # Creating subplot 1 (top)
+    plt.plot(x_values, np.array(min_distances), label='Min distances(MD)')
+    plt.plot(x_values, np.array(ref_min_distances), label='(MV=(MD_BE+MD_AF)/2')
+    for pos, color in zip(circle_positions, circle_colors):
+        if pos < 1:
+            plt.scatter(x_values[int(pos*len(x_values))], 0, color=color)
+        else:
+            plt.scatter(x_values[-1], 0, color=color)
+    plt.xlabel('Length (mm)')
+    plt.ylabel('Distance to centerline (mm)')
+    plt.title('Change in distance')
+    plt.legend(bbox_to_anchor = (1.5, 0.6), loc='upper right')  # Show legend with labels
     # plt.show()
+
+    # plt.figure(figsize=(np.max(np.array(x_values)), np.max(np.array(stenosis_ratio_min))))
+    plt.subplot(4, 1, 2)  # Creating subplot 2 (bottom)
+    plt.plot(x_values, np.array(stenosis_min_squared_fd), label="MD'")
+    plt.plot(x_values, np.array(stenosis_min_squared_sd ), label="MD''")
+    for pos, color in zip(circle_positions, circle_colors):
+        if pos < 1:
+            plt.scatter(x_values[int(pos*len(x_values))], 0, color=color)
+        else:
+            plt.scatter(x_values[-1], 0, color=color)
+    plt.xlabel('Length (mm)')
+    plt.title('Change in distance gradient')
+    plt.legend(bbox_to_anchor = (1.5, 0.6), loc='upper right')  # Show legend with labels
+
+
+    # plt.figure(figsize=(np.max(np.array(x_values)), np.max(np.array(stenosis_ratio_min))))
+    plt.subplot(4, 1, 3)  # Creating subplot 2 (bottom)
+    plt.plot(x_values, np.array(stenosis_ratio_min), label='SR=MD/MV')
+    plt.plot(x_values, np.array(stenosis_ratio_min_squared), label='SSR=SR^2')
+    for pos, color in zip(circle_positions, circle_colors):
+        if pos < 1:
+            plt.scatter(x_values[int(pos*len(x_values))], 0, color=color)
+        else:
+            plt.scatter(x_values[-1], 0, color=color)
+    plt.xlabel('Length (mm)')
+    plt.ylabel('Stenosis ratio (%)')
+    plt.title('Change in stenosis ratio')
+    plt.legend(bbox_to_anchor = (1.5, 0.6), loc='upper right')  # Show legend with labels
+
+    # plt.figure(figsize=(np.max(np.array(x_values)), np.max(np.array(stenosis_ratio_min))))
+    plt.subplot(4, 1, 4)  # Creating subplot 2 (bottom)
+    plt.plot(x_values, np.array(stenosis_ratio_min_squared_fd), label="SSR'")
+    plt.plot(x_values, np.array(stenosis_ratio_min_squared_sd ), label="SSR''")
+    for pos, color in zip(circle_positions, circle_colors):
+        if pos < 1:
+            plt.scatter(x_values[int(pos*len(x_values))], 0, color=color)
+        else:
+            plt.scatter(x_values[-1], 0, color=color)
+    plt.xlabel('Length (mm)')
+    plt.title('Change in stenosis ratio gradient')
+    plt.legend(bbox_to_anchor = (1.5, 0.6), loc='upper right')  # Show legend with labels
+
+    # plt.show()
+    # Saving the combined plot as a PNG image
+    plt.subplots_adjust(hspace=0.5)
+    plt.tight_layout()  # Adjust the layout to prevent overlap
+    plt.savefig('C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/measure_' + str(artery_index) + '.png')
+    # plt.show()
+
+    
+    x_values = [i*distance_threshold for i in range(len(chosen_ring_vertices))]
+    plt.figure(figsize=(np.max(np.array(x_values)), np.max(np.array(avg_distances))))
+    plt.plot(x_values, np.array(avg_distances), label='Avg distances')
+    plt.plot(x_values, np.array(ref_avg_distances), label='Referred distances')
+    plt.plot(x_values, np.array(stenosis_ratio_avg*2), label='Stenosis ratio (Avg distances)')
+    plt.xlabel('Length (mm)')
+    plt.title('Change in vascular geometry')
+    plt.legend()  # Show legend with labels
+    plt.show()
+
+
 
     # x_values = [i*distance_threshold for i in range(len(radius))]
 #     # Find the longest branch
@@ -848,10 +943,8 @@ for artery_index in chosen_arteries:
 # #     # visualized_stenose_ring_points = generate_points(vmtk_boundary_vertices[stenose_ring_points], 3, 'red')
     
     
-# #     # line_traces = []
-# #     # for line in smooth_connected_lines:
-# #     #     print(len(line))
-# #     #     line_traces.append(generate_lines(smooth_points[line], 2))
+    for line in smooth_connected_lines:
+        line_traces.append(generate_lines(smooth_points[line], 2))
 
 
 # #     # visualize_stenose_grades = []
@@ -867,10 +960,21 @@ for artery_index in chosen_arteries:
 vmtk_boundary_vertices_all = np.concatenate(vmtk_boundary_vertices_all, axis=0)
 vmtk_boundary_faces_all = np.concatenate(vmtk_boundary_faces_all, axis=0)
 stenosis_ratios_all = np.concatenate(stenosis_ratios_all, axis=0)
+visualized_start_points = generate_points(np.array(start_points), 10, 'blue')
+visualized_end_points = generate_points(np.array(end_points), 10, 'red')
+visualized_middle_points = generate_points(np.array(middle_points), 10, 'yellow')
+visualized_cons_points = generate_points(np.array(cons_points), 10, 'green')
+visualized_cen_points = generate_points_values(np.array(cen_points),5, 'black', np.array(cen_values))
 
+mesh = generate_mesh(vmtk_boundary_vertices_all, vmtk_boundary_faces_all)
 mesh = generate_mesh_color(vmtk_boundary_vertices_all, vmtk_boundary_faces_all, stenosis_ratios_all, 'Stenosis ratio')
 showed_data.append(mesh)
-show_figure(showed_data, 'Stenosis grade along the extracted centerline of ICA'
-# + line_traces + visualize_stenose_grades
+showed_data.append(visualized_start_points)
+showed_data.append(visualized_middle_points)
+showed_data.append(visualized_end_points)
+showed_data.append(visualized_cons_points)
+showed_data.append(visualized_cen_points) 
+show_figure(showed_data + line_traces, 'Stenosis grade along the extracted centerline of ICA'
 )
+# plt.show()
 

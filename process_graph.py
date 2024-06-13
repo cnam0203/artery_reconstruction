@@ -48,7 +48,7 @@ def find_graphs(skeleton):
         elif value > 2:
             junction_points.append(key)
     
-    return skeleton_points, end_points, junction_points, connected_lines
+    return skeleton_points.astype(int), end_points, junction_points, connected_lines
 
 
 def euclidean_distance(point1, point2):
