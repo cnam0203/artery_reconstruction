@@ -990,7 +990,7 @@ def perpendicular_planes(point1, point2):
     return v1, v2
 
 # Initialize
-sub_nums = [25]
+sub_nums = [9, 129, 167, 269, 581, 619, 2285, 2463, 2799, 3857]
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
 
 for sub_num in sub_nums:
@@ -1021,14 +1021,14 @@ for sub_num in sub_nums:
     info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + str(sub_num) + '/'
     check_and_create_directory(info_dir)
 
-    for artery_index in [1, 2]:
+    for artery_index in [1, 2, 3]:
         print('Artery ', artery_index)
         ## For treated kising vessels
         # processed_mask = segment_data
 
         ## For untreated kissing vessels
         if artery_index in [1, 2]:
-            processed_mask = find_skeleton_ica(segment_image, original_image, artery_index , 0.6, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
+            processed_mask = find_skeleton_ica(segment_image, original_image, artery_index , 0.5, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
             processed_mask = remove_noisy_voxels(processed_mask, neighbor_threshold_1, True)
         else:
             # For normal artery
@@ -1067,5 +1067,5 @@ for sub_num in sub_nums:
 
         
         visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
-
-        show_figure([visualized_boundary_points, visualized_skeleton_points]+line_traces)
+        visualized_boundary_vertices = generate_points(vmtk_boundary_vertices, 1, 'blue')
+        show_figure([visualized_boundary_vertices, visualized_boundary_points, visualized_skeleton_points]+line_traces)
