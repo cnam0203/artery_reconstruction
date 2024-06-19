@@ -84,7 +84,7 @@ def find_angle(vector1, vector2):
     magnitude2 = np.linalg.norm(vector2)
 
     # Calculate the cosine of the angle between the vectors
-    cosine_angle = dot_product / (magnitude1 * magnitude2 + 0.1)
+    cosine_angle = dot_product / (magnitude1 * magnitude2 + 0.001)
 
     # Calculate the angle in radians
     angle_radians = np.arccos(cosine_angle)

@@ -12,6 +12,8 @@ from sklearn.cluster import DBSCAN, KMeans
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import open3d as o3d
+import pymeshlab
 
 import math
 import time
@@ -30,7 +32,6 @@ from visualize_mesh import *
 # from marcube import *
 from artery_ica import *
 from ray_intersection import *
-
 
 # import plotly.graph_objs as go
 from skimage import morphology
@@ -226,6 +227,10 @@ def smooth_centerline(vmtk_vertices, skeleton_points_1, new_connected_lines):
     return points, smooth_connected_lines
 
 def vmtk_smooth_mesh(vertices, faces, num_iteration=2000, division_surface=2):
+    print('Before: ')
+    print(vertices.shape[0])
+    print(faces.shape[0])
+
     surface_data = vtk.vtkPolyData()
     points = vtk.vtkPoints()
     for vertex in vertices:
@@ -249,6 +254,7 @@ def vmtk_smooth_mesh(vertices, faces, num_iteration=2000, division_surface=2):
     smoothed_surface = mySmoother.Surface
 
     if division_surface > 1:
+        print('Divide')
         myMeshGenerator = vmtkscripts.vmtkSurfaceSubdivision()
         myMeshGenerator.Surface = smoothed_surface
         myMeshGenerator.NumberOfSubdivisions = division_surface
@@ -278,6 +284,67 @@ def vmtk_smooth_mesh(vertices, faces, num_iteration=2000, division_surface=2):
     vmtk_faces = np.array(vmtk_faces)
     return vmtk_vertices, vmtk_faces
 
+def vmtk_decimate_mesh(vertices, faces, target_faces=7000):
+    print('Before: ')
+    print(vertices.shape[0])
+    print(faces.shape[0])
+
+    surface_data = vtk.vtkPolyData()
+    points = vtk.vtkPoints()
+    for vertex in vertices:
+        points.InsertNextPoint(vertex)
+    surface_data.SetPoints(points)
+
+    # Add polygons to the surface
+    polygons = vtk.vtkCellArray()
+    for face in faces:
+        polygon = vtk.vtkPolygon()
+        for index in face:
+            polygon.GetPointIds().InsertNextId(index)
+        polygons.InsertNextCell(polygon)
+    surface_data.SetPolys(polygons)
+
+    # myDecimate = vmtkscripts.vmtkSurfaceDecimation()
+    # myDecimate.Surface = surface_data
+    # myDecimate.TargetReduction = 1 - target_faces/faces.shape[0]
+    # myDecimate.Execute()
+    # decimated_surface = myDecimate.Surface
+
+    myMeshGenerator = vmtkscripts.vmtkSurfaceRemeshing()
+    myMeshGenerator.Surface = surface_data
+    myMeshGenerator.ElementSizeMode = "edgelength"
+    myMeshGenerator.TargetEdgeLength = 0.8
+    myMeshGenerator.Execute()
+    decimated_surface = myMeshGenerator.Surface	
+
+    # Get vertices and faces from the surface
+    vmtk_vertices = []
+    vmtk_faces = []
+
+    points = decimated_surface.GetPoints()
+    for i in range(points.GetNumberOfPoints()):
+        point = points.GetPoint(i)
+        vmtk_vertices.append(point)
+
+    cells = decimated_surface.GetPolys()
+    cells.InitTraversal()
+    while True:
+        cell = vtk.vtkIdList()
+        if cells.GetNextCell(cell) == 0:
+            break
+        face = [cell.GetId(j) for j in range(cell.GetNumberOfIds())]
+        vmtk_faces.append(face)
+
+    # Convert vertices and faces to NumPy arrays
+    vmtk_vertices = np.array(vmtk_vertices)
+    vmtk_faces = np.array(vmtk_faces)
+
+    print('After: ')
+    print(vmtk_vertices.shape[0])
+    print(vmtk_faces.shape[0])
+    return vmtk_vertices, vmtk_faces
+
+    
 def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original_data, processed_mask, skeleton, voxel_sizes):
     for index, line in enumerate(new_connected_lines):
         new_points = [[], []]
@@ -992,10 +1059,15 @@ def perpendicular_planes(point1, point2):
 # Initialize
 sub_nums = [9, 129, 167, 269, 581, 619, 2285, 2463, 2799, 3857]
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
+# sub_nums = ['BCW-1205-RES']
 
 for sub_num in sub_nums:
     segment_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_eICAB_CW.nii.gz'
     original_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_resampled.nii.gz'
+
+    # segment_file_path = dataset_dir + f'{str(sub_num)}.nii.gz'
+    # original_file_path = dataset_dir + f'{str(sub_num)}_0000.nii.gz'
+
     # segment_file_path = dataset_dir + 'sub-581_run-1_mra_eICAB_CW.nii.gz'
     # original_file_path = dataset_dir + 'sub-581_run-1_mra_resampled.nii.gz'
     # centerline_file_path = dataset_dir + 'sub-9_run-1_mra_CircleOfWillis_centerline.nii.gz'
@@ -1020,6 +1092,8 @@ for sub_num in sub_nums:
     voxel_sizes = segment_image.header.get_zooms()
     info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + str(sub_num) + '/'
     check_and_create_directory(info_dir)
+    print('Voxel size:', voxel_sizes)
+    print('Image shape:', segment_data.shape)
 
     for artery_index in [1, 2, 3]:
         print('Artery ', artery_index)
@@ -1033,7 +1107,6 @@ for sub_num in sub_nums:
         else:
             # For normal artery
             processed_mask, cf_mask, surf_data = preprocess_data(original_data, segment_data, [artery_index], intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
-
 
         # Extract smooth centerline
         skeleton = skeletonize(processed_mask)
@@ -1056,7 +1129,34 @@ for sub_num in sub_nums:
 
         # Extract boundary
         vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
+
+        # Create an Open3D triangle mesh
+        target_faces = 15000
+        if (faces.shape[0] > target_faces):
+            vertices, faces = vmtk_decimate_mesh(vertices, faces, target_faces)
+        #     vertices = np.array(vertices, dtype=np.float64)
+        #     faces = np.array(faces, dtype=np.int32)
+        #     normals = np.array(normals, dtype=np.float64)
+        #     mesh = pymeshlab.Mesh(vertex_matrix=vertices, face_matrix=faces, v_normals_matrix=normals)
+            
+        #     # Create a MeshSet
+        #     ms = pymeshlab.MeshSet()
+        #     ms.add_mesh(mesh)
+        #     ms.apply_filter("simplification_quadric_edge_collapse_decimation", targetfacenum=target_faces, preservenormal=True)
+
+        #     # Get the resulting mesh
+        #     resulting_mesh = ms.current_mesh()
+
+        #     # Extract vertices and faces as numpy arrays
+        #     vertices = np.array(resulting_mesh.vertex_matrix())
+        #     faces = np.array(resulting_mesh.face_matrix())
+
         vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 20, 1)
+
+        
+        print('After: ')
+        print(vmtk_boundary_vertices.shape[0])
+        print(vmtk_boundary_faces.shape[0])
 
         np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
         np.savetxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')
