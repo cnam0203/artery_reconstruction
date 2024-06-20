@@ -998,6 +998,66 @@ def perpendicular_planes(point1, point2):
 
     return v1, v2
 
+def vmtk_decimate_mesh(vertices, faces, target_faces=7000):
+    print('Before: ')
+    print(vertices.shape[0])
+    print(faces.shape[0])
+
+    surface_data = vtk.vtkPolyData()
+    points = vtk.vtkPoints()
+    for vertex in vertices:
+        points.InsertNextPoint(vertex)
+    surface_data.SetPoints(points)
+
+    # Add polygons to the surface
+    polygons = vtk.vtkCellArray()
+    for face in faces:
+        polygon = vtk.vtkPolygon()
+        for index in face:
+            polygon.GetPointIds().InsertNextId(index)
+        polygons.InsertNextCell(polygon)
+    surface_data.SetPolys(polygons)
+
+    # myDecimate = vmtkscripts.vmtkSurfaceDecimation()
+    # myDecimate.Surface = surface_data
+    # myDecimate.TargetReduction = 1 - target_faces/faces.shape[0]
+    # myDecimate.Execute()
+    # decimated_surface = myDecimate.Surface
+
+    myMeshGenerator = vmtkscripts.vmtkSurfaceRemeshing()
+    myMeshGenerator.Surface = surface_data
+    myMeshGenerator.ElementSizeMode = "edgelength"
+    myMeshGenerator.TargetEdgeLength = 0.8
+    myMeshGenerator.Execute()
+    decimated_surface = myMeshGenerator.Surface	
+
+    # Get vertices and faces from the surface
+    vmtk_vertices = []
+    vmtk_faces = []
+
+    points = decimated_surface.GetPoints()
+    for i in range(points.GetNumberOfPoints()):
+        point = points.GetPoint(i)
+        vmtk_vertices.append(point)
+
+    cells = decimated_surface.GetPolys()
+    cells.InitTraversal()
+    while True:
+        cell = vtk.vtkIdList()
+        if cells.GetNextCell(cell) == 0:
+            break
+        face = [cell.GetId(j) for j in range(cell.GetNumberOfIds())]
+        vmtk_faces.append(face)
+
+    # Convert vertices and faces to NumPy arrays
+    vmtk_vertices = np.array(vmtk_vertices)
+    vmtk_faces = np.array(vmtk_faces)
+
+    print('After: ')
+    print(vmtk_vertices.shape[0])
+    print(vmtk_faces.shape[0])
+    return vmtk_vertices, vmtk_faces
+
 # Initialize
 sub_nums = [9, 129, 167, 269, 581, 619, 2285, 2463, 2799, 3857]
 dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
@@ -1067,6 +1127,10 @@ for sub_num in sub_nums:
 
         # Extract boundary
         vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
+        target_faces = 15000
+        if (faces.shape[0] > target_faces):
+            vertices, faces = vmtk_decimate_mesh(vertices, faces, target_faces)
+            
         vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 20, 1)
 
         np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')

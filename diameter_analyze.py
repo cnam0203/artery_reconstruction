@@ -168,6 +168,11 @@ def find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices
         min_distances.append(min_distance)
         chosen_vertices.append([])
 
+        for idx in form_vertice_index:
+            vertex_idx = ring_vertices[idx]
+            chosen_vertices[-1].append(vertex_idx)
+
+
     for vertex in vertex_ring:
         ring_indices = vertex_ring[vertex]
         min_distance = 10000
@@ -181,8 +186,8 @@ def find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices
 
         vertex_ring[vertex] = chosen_ring_idx    
 
-        if chosen_ring_idx:
-            chosen_vertices[chosen_ring_idx].append(vertex)
+        # if chosen_ring_idx:
+        #     chosen_vertices[chosen_ring_idx].append(vertex)
         
     defined_vertices = [vertex for vertex in vertex_ring if vertex_ring[vertex] != None]
     undefined_vertices = [vertex for vertex in vertex_ring if vertex_ring[vertex] == None]
@@ -531,23 +536,130 @@ for sub_num in sub_nums:
         min_distances = []
         avg_distances = []
 
-        for idx, ring in enumerate(chosen_ring_vertices):
-            min_distance = 10000
-            distances = []
+        # for idx, ring in enumerate(chosen_ring_vertices):
+        #     min_distance = 10000
+        #     distances = []
 
-            for vertex in ring:
-                distance = euclidean_distance(vmtk_boundary_vertices[vertex], chosen_centerpoints[idx])
-                distances.append(distance)
+        #     for vertex in ring:
+        #         distance = euclidean_distance(vmtk_boundary_vertices[vertex], chosen_centerpoints[idx])
+        #         distances.append(distance)
 
-                if distance < min_distance:
-                    min_distance = distance
+        #         if distance < min_distance:
+        #             min_distance = distance
 
-            if min_distance == 10000:
+        #     if min_distance == 10000:
+        #         min_distances.append(0)
+        #         avg_distances.append(0)
+        #     else:
+        #         min_distances.append(min_distance)
+        #         avg_distances.append(np.mean(np.array(distances)))
+        diameter_segments = []
+
+        for idx, ring_vertices in enumerate(chosen_ring_vertices):
+            lines = []
+
+            if len(ring_vertices) and len(ring_vertices) < 200:
+                ring_pos = vmtk_boundary_vertices[ring_vertices]
+                pca = PCA(n_components=2)
+                points_2d = pca.fit_transform(ring_pos)
+                cen_point = pca.transform(np.array([chosen_centerpoints[idx]]))[0]
+
+                # Calculate convex Hull
+                ex_hull = ConvexHull(points_2d)
+                plt.plot(points_2d[:, 0], points_2d[:, 1], 'o')
+                plt.plot(cen_point[0], cen_point[1], 'ro')
+                for simplex in ex_hull.simplices:
+                    plt.plot(points_2d[simplex, 0], points_2d[simplex, 1], 'k-')
+                plt.fill(points_2d[ex_hull.vertices, 0], points_2d[ex_hull.vertices, 1], 'b', alpha=0.2)
+
+
+                for point_idx, point in enumerate(points_2d):
+                    chosen_rest_point_idx = None
+                    max_angle = -1
+
+                    for rest_point_idx, rest_point in enumerate(points_2d):
+                        vector_1 = point - cen_point
+                        vector_2 = rest_point - cen_point
+                        angle = find_angle(vector_1, vector_2)
+
+
+                        if angle >= 160 and angle <= 180:
+                            if angle > max_angle:
+                                max_angle = angle
+                                chosen_rest_point_idx = rest_point_idx
+
+                    if max_angle != -1:
+                        lines.append([point_idx, chosen_rest_point_idx])
+
+                for line in lines:
+                    point1, point2 = points_2d[line]
+                    plt.plot([point1[0], point2[0]], [point1[1], point2[1]], 'b-')  # 'b-' for blue solid lines without markers
+
+                # # Find the interior hull
+                # in_hull, new_concave_points = find_interior_hull(points_2d)
+
+                # for idx in range(new_concave_points.shape[0]):
+                #     plt.plot(points_2d[new_concave_points[[idx-1, idx]], 0], points_2d[new_concave_points[[idx-1, idx]], 1], 'k-')
+                # plt.fill(points_2d[new_concave_points, 0], points_2d[new_concave_points, 1], 'r', alpha=0.2)
+
+                # # Find maxmimum distance from interior points to convex hull
+                # interior_points = [idx for idx, point in enumerate(points_2d) if idx not in ex_hull.vertices]
+                # interior_pos = points_2d[interior_points]
+                # edges = [points_2d[item] for item in ex_hull.simplices]
+                # results = find_closest_edges(interior_pos, edges)
+                # max_distances.append(np.max(np.array(results)))
+                # max_pos = None
+                # is_stenose = False
+                # if np.max(np.array(results)) >= 0.4*stenose_radius[idx]:
+                #     is_stenose = True
+                #     max_idx = np.argmax(np.array(results))
+                #     max_pos = interior_pos[max_idx]
+
+                #     for item in stenose_rings[idx]:
+                #         stenose_ring_points.append(item[0])
+                # is_stenoses.append(is_stenose)
+
+                # # Find the interior hull
+                # in_hull, new_concave_points = find_interior_hull(points_2d)
+                # in_surface_area = area_of_polygon_from_edges(new_concave_points, points_2d)
+                # in_surface_areas.append(in_surface_area)
+
+                # for idx in range(new_concave_points.shape[0]):
+                #     plt.plot(points_2d[new_concave_points[[idx-1, idx]], 0], points_2d[new_concave_points[[idx-1, idx]], 1], 'k-')
+                # plt.fill(points_2d[new_concave_points, 0], points_2d[new_concave_points, 1], 'r', alpha=0.2)
+
+                # # Plotting
+                # if is_stenose:
+                #     print('Length (mm):', idx*distance_threshold, ', surface area:', ex_surface_area, ('mm2'), ', min distance to centerline:', radius[idx], 'mm', ', max distance to surface:', np.max(np.array(results)), 'mm', ', concave')
+                #     plt.suptitle('Stenosis')
+                #     stenosis_indices.append(idx)
+                #     plt.scatter(max_pos[0], max_pos[1], color='red', s=50)
+                # else:
+                #     print('Length (mm):', idx*distance_threshold, ', surface area:', ex_surface_area, ('mm2'), ', min distance to centerline:', radius[idx], 'mm', ', max distance to surface:', np.max(np.array(results)), 'mm', ', convex')
+                #     plt.suptitle('Without stenosis')
+
+                plt.show()
+
+            diameter_segments.append(lines)
+
+
+        for idx, ring_segments in enumerate(diameter_segments):
+            diameters = []
+            for segment in ring_segments:
+                points_idx = [chosen_ring_vertices[idx][segment[0]], chosen_ring_vertices[idx][segment[1]]]
+                point_1, point_2 = vmtk_boundary_vertices[points_idx]
+                distance = euclidean_distance(point_1, point_2)
+                diameters.append(distance)
+
+            if len(diameters):
+                diameters = np.array(diameters)
+                print("Min diameter:", np.min(diameters), 'Avg diameter:', np.mean(diameters)) 
+                min_distances.append(np.min(diameters))
+                avg_distances.append(np.mean(diameters))
+            else:
                 min_distances.append(0)
                 avg_distances.append(0)
-            else:
-                min_distances.append(min_distance)
-                avg_distances.append(np.mean(np.array(distances)))
+
 
         is_stop = False
         while not is_stop:
@@ -1010,4 +1122,3 @@ for sub_num in sub_nums:
     show_figure(showed_data + line_traces, 'Stenosis grade along the extracted centerline of ICA'
     )
     # plt.show()
-
