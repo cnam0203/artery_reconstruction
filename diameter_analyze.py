@@ -515,7 +515,10 @@ for sub_num in sub_nums:
         vmtk_boundary_vertices = np.genfromtxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', delimiter=',')
         vmtk_boundary_vertices = np.round(vmtk_boundary_vertices, 2)
         vmtk_boundary_faces = np.genfromtxt(info_dir + f'vmtk_boundary_faces_{artery_index}.txt', delimiter=',', dtype=int)
-        
+
+        vmtk_boundary_vertices, inverse_indices = np.unique(vmtk_boundary_vertices, axis=0, return_inverse=True)
+        vmtk_boundary_faces = np.array([inverse_indices[face] for face in vmtk_boundary_faces])
+
         with open(info_dir + f'smooth_connected_lines_{artery_index}.json', 'r') as file:
             smooth_connected_lines = json.load(file)
         
@@ -557,6 +560,7 @@ for sub_num in sub_nums:
 
         for idx, ring_vertices in enumerate(chosen_ring_vertices):
             lines = []
+            ring_diameters = []
 
             if len(ring_vertices) and len(ring_vertices) < 200:
                 ring_pos = vmtk_boundary_vertices[ring_vertices]
@@ -566,12 +570,14 @@ for sub_num in sub_nums:
 
                 # Calculate convex Hull
                 ex_hull = ConvexHull(points_2d)
-                plt.plot(points_2d[:, 0], points_2d[:, 1], 'o')
-                plt.plot(cen_point[0], cen_point[1], 'ro')
-                for simplex in ex_hull.simplices:
-                    plt.plot(points_2d[simplex, 0], points_2d[simplex, 1], 'k-')
-                plt.fill(points_2d[ex_hull.vertices, 0], points_2d[ex_hull.vertices, 1], 'b', alpha=0.2)
+                # Example usage
+                # fig, ax = plt.subplots()
 
+                # plt.plot(points_2d[:, 0], points_2d[:, 1], 'o')
+                # plt.plot(cen_point[0], cen_point[1], 'ro')
+                # for simplex in ex_hull.simplices:
+                #     plt.plot(points_2d[simplex, 0], points_2d[simplex, 1], 'k-')
+                # plt.fill(points_2d[ex_hull.vertices, 0], points_2d[ex_hull.vertices, 1], 'b', alpha=0.2)
 
                 for point_idx, point in enumerate(points_2d):
                     chosen_rest_point_idx = None
@@ -590,10 +596,13 @@ for sub_num in sub_nums:
 
                     if max_angle != -1:
                         lines.append([point_idx, chosen_rest_point_idx])
+                        ring_diameters.append(euclidean_distance(ring_pos[point_idx], ring_pos[chosen_rest_point_idx]))
+                    else:
+                        ring_diameters.append(euclidean_distance(ring_pos[point_idx], chosen_centerpoints[idx])*2)
 
-                for line in lines:
-                    point1, point2 = points_2d[line]
-                    plt.plot([point1[0], point2[0]], [point1[1], point2[1]], 'b-')  # 'b-' for blue solid lines without markers
+                # for line in lines:
+                #     point1, point2 = points_2d[line]
+                #     plt.plot([point1[0], point2[0]], [point1[1], point2[1]], 'b-')  # 'b-' for blue solid lines without markers
 
                 # # Find the interior hull
                 # in_hull, new_concave_points = find_interior_hull(points_2d)
@@ -638,18 +647,17 @@ for sub_num in sub_nums:
                 #     print('Length (mm):', idx*distance_threshold, ', surface area:', ex_surface_area, ('mm2'), ', min distance to centerline:', radius[idx], 'mm', ', max distance to surface:', np.max(np.array(results)), 'mm', ', convex')
                 #     plt.suptitle('Without stenosis')
 
-                plt.show()
+                # visualized_boundary_vertices = generate_points(vmtk_boundary_vertices, 1, 'black')
+                # visualized_ring_pos = generate_points(ring_pos, 3, 'red')
+                # visualized_smooth_points = generate_points(smooth_points, 2, 'green')
+                # visualized_segment = generate_points(smooth_points[new_splitted_lines[idx]], 4, 'blue')
+                # show_figure([visualized_boundary_vertices, visualized_ring_pos, visualized_smooth_points, visualized_segment])
 
-            diameter_segments.append(lines)
+            diameter_segments.append(ring_diameters)
 
 
         for idx, ring_segments in enumerate(diameter_segments):
-            diameters = []
-            for segment in ring_segments:
-                points_idx = [chosen_ring_vertices[idx][segment[0]], chosen_ring_vertices[idx][segment[1]]]
-                point_1, point_2 = vmtk_boundary_vertices[points_idx]
-                distance = euclidean_distance(point_1, point_2)
-                diameters.append(distance)
+            diameters = diameter_segments[idx]
 
             if len(diameters):
                 diameters = np.array(diameters)
@@ -676,8 +684,9 @@ for sub_num in sub_nums:
                         neighbor_min_distances.append(min_distances[idx+1])
                         neighbor_avg_distances.append(avg_distances[idx+1])
 
-                    avg_distances[idx] = np.mean(np.array(neighbor_avg_distances))
-                    min_distances[idx] = np.mean(np.array(neighbor_min_distances))
+                    if len(neighbor_avg_distances):
+                        avg_distances[idx] = np.mean(np.array(neighbor_avg_distances))
+                        min_distances[idx] = np.mean(np.array(neighbor_min_distances))
             
             undefined_ranges = [distance for distance in avg_distances if distance == 0 or distance is None]
             if len(undefined_ranges):
@@ -713,8 +722,9 @@ for sub_num in sub_nums:
                         neighbor_min_distances.append(ref_min_distances[idx+1])
                         neighbor_avg_distances.append(ref_avg_distances[idx+1])
 
-                    ref_avg_distances[idx] = np.mean(np.array(neighbor_avg_distances))
-                    ref_min_distances[idx] = np.mean(np.array(neighbor_min_distances))
+                    if len(neighbor_avg_distances):
+                        ref_avg_distances[idx] = np.mean(np.array(neighbor_avg_distances))
+                        ref_min_distances[idx] = np.mean(np.array(neighbor_min_distances))
 
             undefined_ranges = [distance for distance in ref_avg_distances if distance == 0 or distance is None]
             if len(undefined_ranges):
