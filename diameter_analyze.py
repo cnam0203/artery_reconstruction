@@ -17,6 +17,7 @@ import heapq
 import copy
 import trimesh as tm
 import random
+import re
 from collections import Counter
 
 from visualize_graph import *
@@ -201,6 +202,8 @@ def find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices
     for idx, _ in enumerate(undefined_points):
         vertex_ring[undefined_vertices[idx]] = vertex_ring[defined_vertices[indices[idx]]]
 
+    undefined_vertices = [vertex for vertex in vertex_ring if vertex_ring[vertex] == None]
+    print(undefined_vertices)
     return chosen_vertices, centerpoints, vertex_ring
 
 def perpendicular_planes(point1, point2):
@@ -474,13 +477,39 @@ def find_longest_branch(splitted_branches):
 
     return most_common_number
 
-sub_nums = [9, 129, 167, 269, 581, 619, 2285, 2463, 2799, 3857]
+def append_to_file(file_path, data):
+    # Open the file in append mode and save the data
+    with open(file_path, 'a') as f:
+        np.savetxt(f, data, delimiter=',', fmt='%.2f')
+
+dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/tof_mra_julia/'
+dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/pascal/'
+result_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/'
+# pattern = re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz')
+pattern = re.compile(r'^PT_(.*?)_ToF_eICAB_CW\.nii\.gz$')
+sub_nums = []
+
+# Iterate over the files in the directory
+for filename in os.listdir(dataset_dir):
+    match = pattern.match(filename)
+    if match:
+        index = match.group(1)
+
+        sub_nums.append(index)
+        # if str(index) in os.listdir(result_dir):
+        #     sub_nums.append(index)
+
+        print(f'Extracted INDEX: {index} from filename: {filename}')
 
 for sub_num in sub_nums:
-    sub_num = str(sub_num)
-    dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
-    segment_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_eICAB_CW.nii.gz'
-    original_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_resampled.nii.gz'
+    print(result_dir + str(sub_num))
+    # if os.path.isfile(result_dir + str(sub_num) + '/measure_1.png') or not os.path.isfile(result_dir + str(sub_num) + '/smooth_points_1.txt'):
+    #     continue
+    
+    segment_file_path = dataset_dir + f'PT_{str(sub_num)}_ToF_eICAB_CW.nii.gz'
+    original_file_path = dataset_dir + f'PT_{str(sub_num)}_ToF_resampled.nii.gz'
+    # segment_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_eICAB_CW.nii.gz'
+    # original_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_resampled.nii.gz'
 
     segment_image = nib.load(segment_file_path)
     original_image = nib.load(original_file_path)
@@ -495,6 +524,7 @@ for sub_num in sub_nums:
     vmtk_boundary_vertices_all = []
     vmtk_boundary_faces_all = []
     stenosis_ratios_all = []
+    min_diam_rings = []
     vert_num = 0
     line_traces = []
     end_points = []
@@ -504,13 +534,18 @@ for sub_num in sub_nums:
     chosen_arteries = [1]
     cen_points = []
     cen_values = []
-    chosen_arteries = [1, 2, 3]
+    chosen_arteries = [5, 6, 7, 8]
 
     for artery_index in chosen_arteries:
         artery_key = "Artery_" + str(artery_index)
         info[artery_key] = []
-        
+        min_vertices = []
+
         print(artery_key)
+
+        if not os.path.isfile(info_dir + f'smooth_points_{artery_index}.txt') or os.path.isfile(info_dir + f'measure_{artery_index}.png'):
+            continue
+
         smooth_points = np.genfromtxt(info_dir + f'smooth_points_{artery_index}.txt', delimiter=',')
         vmtk_boundary_vertices = np.genfromtxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', delimiter=',')
         vmtk_boundary_vertices = np.round(vmtk_boundary_vertices, 2)
@@ -528,6 +563,9 @@ for sub_num in sub_nums:
         ring_vertices, centerpoints, vertex_ring = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
         longest_branch_idx = find_longest_branch(splitted_branches)
         chosen_ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if splitted_branches[idx] == longest_branch_idx]
+        with open(info_dir + f'chosen_ring_{artery_index}.json', 'w') as file:
+            json.dump(chosen_ring_vertices, file)  # indent=4 makes the file more readable
+        np.savetxt(info_dir + f'min_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')
         chosen_centerpoints = [centerpoint for idx, centerpoint in enumerate(centerpoints) if splitted_branches[idx] == longest_branch_idx]
         start_points.append(chosen_centerpoints[0])
         end_points.append(chosen_centerpoints[-1])
@@ -557,12 +595,12 @@ for sub_num in sub_nums:
         #         min_distances.append(min_distance)
         #         avg_distances.append(np.mean(np.array(distances)))
         diameter_segments = []
-
+        
         for idx, ring_vertices in enumerate(chosen_ring_vertices):
             lines = []
             ring_diameters = []
 
-            if len(ring_vertices) and len(ring_vertices) < 200:
+            if len(ring_vertices) > 2 and len(ring_vertices) < 200:
                 ring_pos = vmtk_boundary_vertices[ring_vertices]
                 pca = PCA(n_components=2)
                 points_2d = pca.fit_transform(ring_pos)
@@ -668,7 +706,6 @@ for sub_num in sub_nums:
                 min_distances.append(0)
                 avg_distances.append(0)
 
-
         is_stop = False
         while not is_stop:
             is_stop = True
@@ -691,6 +728,14 @@ for sub_num in sub_nums:
             undefined_ranges = [distance for distance in avg_distances if distance == 0 or distance is None]
             if len(undefined_ranges):
                 is_stop = False
+
+        start_idx = 10
+        end_idx = -10
+
+        if len(min_distances[start_idx:end_idx]):
+            min_diam_ring_idx = np.argmin(np.array(min_distances[start_idx:end_idx]))
+            min_vertices = vmtk_boundary_vertices[chosen_ring_vertices[min_diam_ring_idx+start_idx]]
+            min_diam_rings.append(min_vertices)
 
         ref_min_distances = []
         ref_avg_distances = []
@@ -731,15 +776,17 @@ for sub_num in sub_nums:
                 is_stop = False
 
         ratios = []
+    
+        avg_diameter = np.mean(np.array(avg_distances))
         for idx, point in enumerate(vmtk_boundary_vertices):
             ring_idx = vertex_ring[idx]
             centerpoint = centerpoints[ring_idx]
             distance = euclidean_distance(point, centerpoint)
-            ratio = distance/ref_min_distances[ring_idx]
+            ratio = distance*2/avg_diameter
             
             if ratio > 1:
                 ratio = 1
-            ratios.append(ratio*100)
+            ratios.append(100-ratio*100)
 
         stenosis_ratio_min = np.array(min_distances)/np.array(ref_min_distances)
         stenosis_ratio_min[stenosis_ratio_min > 1] = 1
@@ -823,7 +870,7 @@ for sub_num in sub_nums:
         # Saving the combined plot as a PNG image
         plt.subplots_adjust(hspace=0.5)
         plt.tight_layout()  # Adjust the layout to prevent overlap
-        plt.savefig('C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + sub_num + '/measure_' + str(artery_index) + '.png')
+        plt.savefig('C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + str(sub_num) + '/measure_' + str(artery_index) + '.png')
         # plt.show()
 
         
@@ -868,96 +915,96 @@ for sub_num in sub_nums:
 
 
 
-        # x_values = [i*distance_threshold for i in range(len(radius))]
-    #     # Find the longest branch
-    #     branches, longest_branch_idx = find_longest_branch(ring_vertices, splitted_branches, radiuses, distance_threshold)
-    #     chosen_ring = rings[longest_branch_idx]
-    #     longest_branch = branches[longest_branch_idx]
-    #     radius = [round(euclidean_distance(item[0], item[1]), 2) for item in longest_branch]
+    #     # x_values = [i*distance_threshold for i in range(len(radius))]
+    # #     # Find the longest branch
+    # #     branches, longest_branch_idx = find_longest_branch(ring_vertices, splitted_branches, radiuses, distance_threshold)
+    # #     chosen_ring = rings[longest_branch_idx]
+    # #     longest_branch = branches[longest_branch_idx]
+    # #     radius = [round(euclidean_distance(item[0], item[1]), 2) for item in longest_branch]
 
-    #     # Stenosis evaluation
-    #     # local_min = argrelextrema(np.array(radius), np.less)[0]
-    #     # stenose_points = [item[1] for index, item in enumerate(longest_branch) if index in local_min.tolist()]
-    #     # stenose_rings = [item for index, item in enumerate(chosen_ring) if index in local_min.tolist()]
-    #     # stenose_radius = [item for index, item in enumerate(radius) if index in local_min.tolist()]
-    #     stenose_rings += [item for index, item in enumerate(chosen_ring)]
-    #     stenose_radius = [item for index, item in enumerate(radius)]
-
-        
-    # #     new_stenose_radius, valid_mask = side_stable_mask(np.array(stenose_radius), ratio_threshold=0.2, dif_thresh=0.1)
-    # #     x_values = [i*distance_threshold for i in range(len(radius))]
-
-
-    # #     stable_ring_points = []
-    # #     refer_radius = np.min(new_stenose_radius[valid_mask == 1])
-
-    # #     stenosis_grades = {
-    # #         '3': [],
-    # #         '2': [],
-    # #         '1': [],
-    # #         '0': []
-    # #     }
-    # #     stenosis_colors = {
-    # #         '0': 'red',
-    # #         '1': 'orange',
-    # #         '2': 'yellow',
-    # #         '3': 'green'
-    # #     }
-
-    # #     for idx, value in enumerate(valid_mask):
-    # #         if value == 1:
-    # #             for item in stenose_rings[idx]:
-    # #                 stable_ring_points.append(item[0])
-
-    # #         ratio = radius[idx]/refer_radius
-
-    # #         if ratio < 0.2:
-    # #             for item in stenose_rings[idx]:
-    # #                 stenosis_grades['0'].append(item[0])
-    # #         elif ratio < 0.5:
-    # #             for item in stenose_rings[idx]:
-    # #                 stenosis_grades['1'].append(item[0])
-    # #         elif ratio < 0.8:
-    # #             for item in stenose_rings[idx]:
-    # #                 stenosis_grades['2'].append(item[0])
-    # #         else:
-    # #             for item in stenose_rings[idx]:
-    # #                 stenosis_grades['3'].append(item[0])
+    # #     # Stenosis evaluation
+    # #     # local_min = argrelextrema(np.array(radius), np.less)[0]
+    # #     # stenose_points = [item[1] for index, item in enumerate(longest_branch) if index in local_min.tolist()]
+    # #     # stenose_rings = [item for index, item in enumerate(chosen_ring) if index in local_min.tolist()]
+    # #     # stenose_radius = [item for index, item in enumerate(radius) if index in local_min.tolist()]
+    # #     stenose_rings += [item for index, item in enumerate(chosen_ring)]
+    # #     stenose_radius = [item for index, item in enumerate(radius)]
 
         
-    # #     stenosis_ratios = [10000]*vmtk_boundary_vertices.shape[0]
+    # # #     new_stenose_radius, valid_mask = side_stable_mask(np.array(stenose_radius), ratio_threshold=0.2, dif_thresh=0.1)
+    # # #     x_values = [i*distance_threshold for i in range(len(radius))]
 
-    # #     for stenose_ring in stenose_rings:
-    # #         for point in stenose_ring:
-    # #             idx = point[0]
-    # #             distance = euclidean_distance(vmtk_boundary_vertices[idx], point[1])
-    # #             if distance < stenosis_ratios[idx]:
-    # #                 stenosis_ratios[idx] = distance
+
+    # # #     stable_ring_points = []
+    # # #     refer_radius = np.min(new_stenose_radius[valid_mask == 1])
+
+    # # #     stenosis_grades = {
+    # # #         '3': [],
+    # # #         '2': [],
+    # # #         '1': [],
+    # # #         '0': []
+    # # #     }
+    # # #     stenosis_colors = {
+    # # #         '0': 'red',
+    # # #         '1': 'orange',
+    # # #         '2': 'yellow',
+    # # #         '3': 'green'
+    # # #     }
+
+    # # #     for idx, value in enumerate(valid_mask):
+    # # #         if value == 1:
+    # # #             for item in stenose_rings[idx]:
+    # # #                 stable_ring_points.append(item[0])
+
+    # # #         ratio = radius[idx]/refer_radius
+
+    # # #         if ratio < 0.2:
+    # # #             for item in stenose_rings[idx]:
+    # # #                 stenosis_grades['0'].append(item[0])
+    # # #         elif ratio < 0.5:
+    # # #             for item in stenose_rings[idx]:
+    # # #                 stenosis_grades['1'].append(item[0])
+    # # #         elif ratio < 0.8:
+    # # #             for item in stenose_rings[idx]:
+    # # #                 stenosis_grades['2'].append(item[0])
+    # # #         else:
+    # # #             for item in stenose_rings[idx]:
+    # # #                 stenosis_grades['3'].append(item[0])
+
         
-    # #     # Build KDTree from array1
-    # #     kdtree = KDTree(smooth_points)
-    # #     distances, indices = kdtree.query(vmtk_boundary_vertices)
+    # # #     stenosis_ratios = [10000]*vmtk_boundary_vertices.shape[0]
 
-    # #     for idx, value in enumerate(stenosis_ratios):
-    # #         if value == 10000:
-    # #             stenosis_ratios[idx] = distances[idx]
+    # # #     for stenose_ring in stenose_rings:
+    # # #         for point in stenose_ring:
+    # # #             idx = point[0]
+    # # #             distance = euclidean_distance(vmtk_boundary_vertices[idx], point[1])
+    # # #             if distance < stenosis_ratios[idx]:
+    # # #                 stenosis_ratios[idx] = distance
+        
+    # # #     # Build KDTree from array1
+    # # #     kdtree = KDTree(smooth_points)
+    # # #     distances, indices = kdtree.query(vmtk_boundary_vertices)
 
-    # #     stenosis_ratios = np.array(stenosis_ratios)/refer_radius
-    # #     stenosis_ratios[stenosis_ratios >= 1] = 1
+    # # #     for idx, value in enumerate(stenosis_ratios):
+    # # #         if value == 10000:
+    # # #             stenosis_ratios[idx] = distances[idx]
 
-    # #     # Initialize the color array with the same size as stenosis_ratios
-    # #     color_array = np.empty(stenosis_ratios.shape, dtype='<U6')
+    # # #     stenosis_ratios = np.array(stenosis_ratios)/refer_radius
+    # # #     stenosis_ratios[stenosis_ratios >= 1] = 1
 
-    # #     # Assign colors based on the ratios
-    # #     color_array[stenosis_ratios < 0.2] = 1
-    # #     color_array[(stenosis_ratios >= 0.2) & (stenosis_ratios < 0.5)] = 2
-    # #     color_array[(stenosis_ratios >= 0.5) & (stenosis_ratios < 0.7)] = 3
-    # #     color_array[stenosis_ratios >= 0.7] = 4
+    # # #     # Initialize the color array with the same size as stenosis_ratios
+    # # #     color_array = np.empty(stenosis_ratios.shape, dtype='<U6')
 
-        vmtk_boundary_vertices_all.append(vmtk_boundary_vertices)
-        vmtk_boundary_faces_all.append(vmtk_boundary_faces + vert_num)
-        stenosis_ratios_all.append(ratios)
-        vert_num += vmtk_boundary_vertices.shape[0]
+    # # #     # Assign colors based on the ratios
+    # # #     color_array[stenosis_ratios < 0.2] = 1
+    # # #     color_array[(stenosis_ratios >= 0.2) & (stenosis_ratios < 0.5)] = 2
+    # # #     color_array[(stenosis_ratios >= 0.5) & (stenosis_ratios < 0.7)] = 3
+    # # #     color_array[stenosis_ratios >= 0.7] = 4
+
+    #     vmtk_boundary_vertices_all.append(vmtk_boundary_vertices)
+    #     vmtk_boundary_faces_all.append(vmtk_boundary_faces + vert_num)
+    #     stenosis_ratios_all.append(ratios)
+    #     vert_num += vmtk_boundary_vertices.shape[0]
 
     # #     # stenose_ring_points = []
     # #     # stenosis_indices = []
@@ -1099,7 +1146,7 @@ for sub_num in sub_nums:
         
         
         for line in smooth_connected_lines:
-            line_traces.append(generate_lines(smooth_points[line], 2))
+            line_traces.append(generate_lines(smooth_points[line], 2))    
 
 
     # #     # visualize_stenose_grades = []
@@ -1112,23 +1159,35 @@ for sub_num in sub_nums:
     # #         # + line_traces + visualize_stenose_grades
     # #         )
 
-    vmtk_boundary_vertices_all = np.concatenate(vmtk_boundary_vertices_all, axis=0)
-    vmtk_boundary_faces_all = np.concatenate(vmtk_boundary_faces_all, axis=0)
-    stenosis_ratios_all = np.concatenate(stenosis_ratios_all, axis=0)
-    visualized_start_points = generate_points(np.array(start_points), 10, 'blue')
-    visualized_end_points = generate_points(np.array(end_points), 10, 'red')
-    visualized_middle_points = generate_points(np.array(middle_points), 10, 'yellow')
-    visualized_cons_points = generate_points(np.array(cons_points), 10, 'green')
-    visualized_cen_points = generate_points_values(np.array(cen_points),5, 'black', np.array(cen_values))
+    if len(min_diam_rings):
+        append_to_file(os.path.join(info_dir, 'min_vertices.txt'), np.concatenate(min_diam_rings, axis=0))
+    append_to_file(os.path.join(info_dir, 'start_points.txt'), np.array(start_points))
+    append_to_file(os.path.join(info_dir, 'end_points.txt'), np.array(end_points))
+    append_to_file(os.path.join(info_dir, 'middle_points.txt'), np.array(middle_points))
+    append_to_file(os.path.join(info_dir, 'cons_points.txt'), np.array(cons_points))
 
-    mesh = generate_mesh(vmtk_boundary_vertices_all, vmtk_boundary_faces_all)
-    mesh = generate_mesh_color(vmtk_boundary_vertices_all, vmtk_boundary_faces_all, stenosis_ratios_all, 'Stenosis ratio')
-    showed_data.append(mesh)
-    showed_data.append(visualized_start_points)
-    showed_data.append(visualized_middle_points)
-    showed_data.append(visualized_end_points)
-    showed_data.append(visualized_cons_points)
-    showed_data.append(visualized_cen_points) 
-    show_figure(showed_data + line_traces, 'Stenosis grade along the extracted centerline of ICA'
-    )
+    # vmtk_boundary_vertices_all = np.concatenate(vmtk_boundary_vertices_all, axis=0)
+    # vmtk_boundary_faces_all = np.concatenate(vmtk_boundary_faces_all, axis=0)
+    # stenosis_ratios_all = np.concatenate(stenosis_ratios_all, axis=0)
+    # min_diam_rings = np.concatenate(min_diam_rings, axis=0)
+    # visualized_start_points = generate_points(np.array(start_points), 10, 'blue')
+    # visualized_end_points = generate_points(np.array(end_points), 10, 'red')
+    # visualized_middle_points = generate_points(np.array(middle_points), 10, 'yellow')
+    # visualized_cons_points = generate_points(np.array(cons_points), 10, 'green')
+    # visualized_cen_points = generate_points_values(np.array(cen_points), 5, 'black', np.array(cen_values))
+    # visualized_min_diam_rings = generate_points(min_diam_rings, 5, 'red')
+
+    
+    
+    # mesh = generate_mesh(vmtk_boundary_vertices_all, vmtk_boundary_faces_all)
+    # mesh = generate_mesh_color(vmtk_boundary_vertices_all, vmtk_boundary_faces_all, stenosis_ratios_all, 'Stenosis ratio')
+    # showed_data.append(mesh)
+    # showed_data.append(visualized_start_points)
+    # showed_data.append(visualized_middle_points)
+    # showed_data.append(visualized_end_points)
+    # showed_data.append(visualized_cons_points)
+    # showed_data.append(visualized_cen_points) 
+    # showed_data.append(visualized_min_diam_rings) 
+    # show_figure(showed_data + line_traces, f'Stenosis grade along the extracted centerline of sub-{sub_num}'
+    # )
     # plt.show()

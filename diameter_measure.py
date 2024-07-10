@@ -21,6 +21,7 @@ import heapq
 import copy
 import trimesh as tm
 import random
+import re
 
 from preprocess_data import *
 from process_graph import *
@@ -487,7 +488,6 @@ def extend_skeleton(new_connected_lines, end_points, skeleton_points_1, original
     return new_connected_lines, skeleton, skeleton_points_1
 
 def remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, len_threshold=10):
-    
     is_first = 0
     count = 0
 
@@ -495,8 +495,6 @@ def remove_short_branch(skeleton, skeleton_points, end_points, junction_points, 
         is_first += 1
         count = 0
         new_connected_lines = []
-
-        # print('1. ', connected_lines, end_points, junction_points)
 
         for line in connected_lines:
             if len(line) <= len_threshold and ((line[0] in end_points) or (line[-1] in end_points)):
@@ -508,7 +506,6 @@ def remove_short_branch(skeleton, skeleton_points, end_points, junction_points, 
             else:
                 new_connected_lines.append(line)
 
-        # print('2. ', new_connected_lines)
         end_points = []
         junction_points = []
 
@@ -638,12 +635,14 @@ def extend_branch(branch_idx, point_idx, remove_list, add_list, connected_lines,
                 max_idx = idx
                 max_head = head
                 max_weighted_len = find_actual_length(result_head, points, voxel_sizes)
+            elif (find_actual_length(result_head, points, voxel_sizes) < 0.5*max_weighted_len):
+                continue
             elif (find_actual_length(result_head, points, voxel_sizes) > 1.2*max_weighted_len):
                 max_angle = angle
                 max_idx = idx
                 max_head = head
                 max_weighted_len = find_actual_length(result_head, points, voxel_sizes)
-            elif (angle > max_angle + 2):
+            elif (angle > max_angle + 20):
                 max_angle = angle
                 max_idx = idx
                 max_head = head
@@ -661,7 +660,7 @@ def extend_branch(branch_idx, point_idx, remove_list, add_list, connected_lines,
                         max_head = head
                         max_weighted_len = find_actual_length(result_head, points, voxel_sizes)
 
-            print('Line ', branch_idx, max_idx)
+            print('Line ', branch_idx, max_idx, max_weighted_len, max_angle)
 
         add_list.append(max_idx)
         for idx in considered_lines:
@@ -815,12 +814,8 @@ def remove_redundant_branch(skeleton, skeleton_points, end_points, junction_poin
                         if idx_p not in point_count[idx]:
                             new_lines.append(line)
                     
-                    # print('Avant:', len(new_connected_lines))
-                    # print(new_connected_lines)
                     new_lines.append(new_line)
-                    new_connected_lines = new_lines
-                    # print('Après:', len(new_connected_lines))
-                    # print(new_connected_lines)
+                    new_connected_lines = new_lines 
                     break
         
         end_points = []
@@ -1059,12 +1054,28 @@ def vmtk_decimate_mesh(vertices, faces, target_faces=7000):
     return vmtk_vertices, vmtk_faces
 
 # Initialize
-sub_nums = [9, 129, 167, 269, 581, 619, 2285, 2463, 2799, 3857]
-dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/'
+dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/tof_mra_julia/'
+dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/pascal/'
+info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/'
+# pattern = re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz')
+pattern = re.compile(r'^PT_(.*?)_ToF_eICAB_CW\.nii\.gz$')
+sub_nums = []
+
+# Iterate over the files in the directory
+for filename in os.listdir(dataset_dir):
+    match = pattern.match(filename)
+    if match:
+        index = match.group(1)
+
+        sub_nums.append(index)
+        # if str(index) not in os.listdir(info_dir):
+        #     sub_nums.append(index)
+
+        print(f'Extracted INDEX: {index} from filename: {filename}')
 
 for sub_num in sub_nums:
-    segment_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_eICAB_CW.nii.gz'
-    original_file_path = dataset_dir + f'sub-{str(sub_num)}_run-1_mra_resampled.nii.gz'
+    segment_file_path = dataset_dir + f'PT_{str(sub_num)}_ToF_eICAB_CW.nii.gz'
+    original_file_path = dataset_dir + f'PT_{str(sub_num)}_ToF_resampled.nii.gz'
     # segment_file_path = dataset_dir + 'sub-581_run-1_mra_eICAB_CW.nii.gz'
     # original_file_path = dataset_dir + 'sub-581_run-1_mra_resampled.nii.gz'
     # centerline_file_path = dataset_dir + 'sub-9_run-1_mra_CircleOfWillis_centerline.nii.gz'
@@ -1090,8 +1101,12 @@ for sub_num in sub_nums:
     info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + str(sub_num) + '/'
     check_and_create_directory(info_dir)
 
-    for artery_index in [1, 2, 3]:
+    for artery_index in [5, 6, 7, 8]:
         print('Artery ', artery_index)
+
+        if os.path.isfile(info_dir + f'smooth_points_{artery_index}.txt') or (sub_num == 'PL049_V3' and artery_index == 6):
+            continue
+
         ## For treated kising vessels
         # processed_mask = segment_data
 
@@ -1107,7 +1122,17 @@ for sub_num in sub_nums:
         # Extract smooth centerline
         skeleton = skeletonize(processed_mask)
         skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
-        skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, len_threshold)
+
+        if len(connected_lines) > 1:
+            skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, len_threshold)
+
+        visualized_skeleton_points = generate_points(voxel_sizes*(skeleton_points+0.5), 3, 'red')
+        visualized_junc_points = generate_points(voxel_sizes*(skeleton_points+0.5)[junction_points], 3, 'blue')
+        # show_figure([visualized_skeleton_points, visualized_junc_points])
+
+        if len(connected_lines) == 0:
+            continue 
+
         skeleton, connected_lines, end_points, junction_points = remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes, len_threshold)
         connected_lines, skeleton, skeleton_points = extend_skeleton(connected_lines, end_points, skeleton_points, original_data, processed_mask, skeleton, voxel_sizes)
         
@@ -1122,15 +1147,16 @@ for sub_num in sub_nums:
 
         # vmtk_skeleton_vertices, vmtk_skeleton_faces = vmtk_smooth_mesh(vertices, faces, 2000)
         skel = contract_mesh(vertices, faces, normals)
+        visualized_vertices = generate_points(vertices, 1, 'red')
         vmtk_skeleton_vertices = skel.vertices
         smooth_points, smooth_connected_lines = smooth_centerline(vmtk_skeleton_vertices, skeleton_points, connected_lines)
 
         # Extract boundary
         vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
         target_faces = 15000
-        if (faces.shape[0] > target_faces):
-            vertices, faces = vmtk_decimate_mesh(vertices, faces, target_faces)
-            
+        # if (faces.shape[0] > target_faces):
+        vertices, faces = vmtk_decimate_mesh(vertices, faces, target_faces)
+
         vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 20, 1)
 
         np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
@@ -1146,4 +1172,4 @@ for sub_num in sub_nums:
         visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
         visualized_boundary_vertices = generate_points(vmtk_boundary_vertices, 1, 'blue')
         visualized_smooth_points = generate_points(vmtk_skeleton_vertices, 2, 'green')
-        show_figure([visualized_boundary_vertices, visualized_smooth_points]+line_traces)
+        # show_figure([visualized_boundary_vertices, visualized_smooth_points, visualized_vertices]+line_traces)

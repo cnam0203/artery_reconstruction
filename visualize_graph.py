@@ -64,7 +64,39 @@ def generate_points(points, point_size=2, point_color='black'):
         text=[f'Pos {i}' for i in range(points.shape[0])]
     )
 
-def generate_mesh(vertices, faces):
+def generate_points_name(points, point_size=2, point_color='black', name=''):
+    """
+    The function `generate_points` creates a 3D scatter plot of points with specified size and color.
+    
+    :param points: The `points` parameter in the `generate_points` function is expected to be a 2D NumPy
+    array containing the coordinates of the points in a 3D space. Each row of the array represents a
+    point, and the columns represent the x, y, and z coordinates of that point
+    :param point_size: The `point_size` parameter in the `generate_points` function is used to specify
+    the size of the markers representing the points in a 3D scatter plot. This parameter allows you to
+    control the visual appearance of the points by setting their size. The default value for
+    `point_size` is, defaults to 2 (optional)
+    :param point_color: The `point_color` parameter in the `generate_points` function is used to specify
+    the color of the points in the 3D scatter plot. You can provide a color name (e.g., 'red', 'blue',
+    'green') or a hexadecimal color code (e.g., '#FF, defaults to black (optional)
+    :return: The function `generate_points` is returning a Scatter3d plot with the specified points,
+    point size, and point color. The plot will display the points in a 3D space as markers with the
+    given size and color.
+    """
+
+    return go.Scatter3d(
+        x=points[:, 0],
+        y=points[:, 1],
+        z=points[:, 2],
+        mode='markers',
+        marker=dict(
+            size=point_size,
+            color=point_color
+        ),
+        name=name,
+        text=[f'Pos {i}' for i in range(points.shape[0])]
+    )
+
+def generate_mesh(vertices, faces, title, color):
     mesh = go.Mesh3d(
         x=vertices[:, 0],
         y=vertices[:, 1],
@@ -73,7 +105,9 @@ def generate_mesh(vertices, faces):
         j=faces[:, 1],
         k=faces[:, 2],
         opacity=0.3,
-        color='#50ad61'
+        color=color,
+        name=title,
+        showlegend=True
     )
 
     return mesh
@@ -90,7 +124,7 @@ def generate_mesh_color(vertices, faces, colors, title=''):
         intensity=colors,
         colorscale='Viridis',
         hoverinfo='text',
-        opacity=0.8,
+        opacity=0.3,
         hovertext=hover_text,
         name='Stenosis ratio',
         colorbar=dict(title='Stenosis Ratio')
@@ -190,4 +224,5 @@ def generate_lines(lines, line_width=2, line_color='black'):
             width=line_width,
             color=line_color
         ),
+        showlegend=False
     )

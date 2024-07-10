@@ -1,3 +1,4 @@
 dataset/*
+info_files/*
 mesh/*
 __pycache__/*
