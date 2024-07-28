@@ -231,6 +231,75 @@ def select_faces_with_chosen_vertices(vertices, faces, chosen_vertices, loop=2):
 
     
     if len(selected_faces):
-        selected_faces = vertices[np.array(selected_faces)]
-    return selected_faces
+        selected_faces = np.array(selected_faces)
+    return np.array(selected_faces)
 
+
+def select_form_vertices_by_ray(ring_vertices, vmtk_boundary_vertices, surfaces, intsecpoints, min_distance, distance_threshold=10):
+    form_vertice_index = []
+    for idx, vertex_index in enumerate(ring_vertices):
+        vertex = vmtk_boundary_vertices[vertex_index]
+        intersection_point = intsecpoints[idx]
+        distance = euclidean_distance(vertex, intersection_point)
+        exist = False
+
+        for surface in surfaces:
+            is_intersect, triangular_point = ray_intersects_triangle(vertex, intersection_point, vmtk_boundary_vertices[surface])
+            
+            if is_intersect:
+                exist = True
+                break
+                        
+        if not exist:
+            if distance > distance_threshold*min_distance:
+                exist = True
+
+        if not exist:                      
+            form_vertice_index.append(idx)     
+
+    return form_vertice_index
+
+def select_form_vertices_by_connection(vertices, faces, chosen_vertices, min_vertex_idx):
+    true_vertices = [min_vertex_idx]
+    is_found = True
+    selected_faces = []
+
+    while is_found:
+        is_found = False
+
+        for idx, face in enumerate(faces):
+            if idx not in selected_faces:
+                if any(vertex_index in true_vertices for vertex_index in face):
+                    selected_faces.append(idx)
+        
+        unvisited_vertices = [idx for idx in chosen_vertices if idx not in true_vertices]
+        for unvisited_vertex in unvisited_vertices:
+            for idx in selected_faces:
+                if any(vertex_index == unvisited_vertex for vertex_index in faces[idx]):
+                    true_vertices.append(unvisited_vertex)
+                    is_found = True
+                    break
+
+    form_vertice_index = []
+    for idx, vertex in enumerate(chosen_vertices):
+        if vertex in true_vertices:
+            form_vertice_index.append(idx)
+
+    return form_vertice_index
+
+    #         # Iterate over each face
+    #         list_vertices = []
+    #         selected_faces = []
+
+    #         for face in faces:
+    #             # Check if any vertex index in the face is in the chosen set
+    #             if any(vertex_index in chosen_set for vertex_index in face):
+    #                 selected_faces.append(face)
+                    
+    #                 # Convert inner lists to tuples
+    #                 tuple_list = [tuple(sublist.tolist()) for sublist in selected_faces]
+    #                 unique_tuples = set(tuple_list)
+    #                 selected_faces = [np.array(t) for t in unique_tuples]
+            
+
+            

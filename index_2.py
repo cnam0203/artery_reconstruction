@@ -8,113 +8,57 @@ import os
 import json
 from visualize_graph import *
 from process_graph import *
+from ref_measurement import *
 import itertools
 
-def max_stable_mask(a, pos, ratio_threshold, distance, interval_size, dif_thresh): # thresh controls noise
-    pass_steps = int(distance/interval_size)
-    
-    left_mask = None
-    right_mask = None
-    left_radius = None
-    right_radius = None
-    mean_radius = None
-    #Left
-    if pos - 2*pass_steps >= 0:
-        left_arr = a[pos - 2*pass_steps : pos - pass_steps]
-        left_values, left_mask = side_stable_mask(left_arr, ratio_threshold, dif_thresh)
-        left_radius = np.mean(left_values[left_mask == 1])
+options = [
+    {
+        'dataset_dir': 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/tof_mra_julia/',
+        'pattern': re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz'),
+        'arteries': [1, 2, 3],
+        'is_replace': True,
+        'org_pre_str': 'sub-',
+        'org_post_str': '_run-1_mra_eICAB_CW.nii.gz',
+        'seg_pre_str': 'sub-',
+        'seg_post_str': '_run-1_mra_resampled.nii.gz',
+    }, {
+        'dataset_dir': 'E:/pascal/',
+        'pattern': re.compile(r'^PT_(.*?)_ToF_eICAB_CW\.nii\.gz$'),
+        'arteries': [17, 18],
+        'is_replace': False,
+        'org_pre_str': 'PT_',
+        'org_post_str': '_ToF_eICAB_CW.nii.gz',
+        'seg_pre_str': 'PT_',
+        'seg_post_str': '_ToF_resampled.nii.gz',
+    }, {
+        'dataset_dir': 'E:/stenosis/',
+        'pattern': re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz'),
+        'arteries': [1, 2, 3],
+        'is_replace': True,
+        'org_pre_str': 'sub-',
+        'org_post_str': '_run-1_mra_eICAB_CW.nii.gz',
+        'seg_pre_str': 'sub-',
+        'seg_post_str': '_run-1_mra_resampled.nii.gz',
+    }
+]
 
-    if pos + 2*pass_steps < a.shape[0]:
-        right_arr = a[pos + pass_steps : pos + 2*pass_steps]
-        right_values, right_mask = side_stable_mask(right_arr, ratio_threshold, dif_thresh)
-        right_radius = np.mean(right_values[right_mask == 1])
-    
-    if left_radius == None and right_radius != None:
-        mean_radius = right_radius
-    elif left_radius != None and right_radius == None:
-        mean_radius = left_radius
-    elif left_radius != None and right_radius != None:
-        mean_radius = (left_radius + right_radius)/2
-    
-    return mean_radius
-
-def side_stable_mask(arr, ratio_threshold, dif_thresh):
-    a = np.copy(arr)
-    is_end = False
-    loop_count = 0
-    while not is_end and loop_count <= 50:
-        loop_count += 1
-        max_value = round(a.max(), 1)
-        mask = np.r_[ False, np.abs(a - max_value) < dif_thresh, False]
-        idx = np.flatnonzero(mask[1:] != mask[:-1])
-        s0 = (idx[1::2] - idx[::2]).argmax()
-        valid_mask = np.zeros(a.size, dtype=int) #Use dtype=bool for mask o/p
-        valid_mask[idx[2*s0]:idx[2*s0+1]] = 1
-
-        if np.argwhere(valid_mask == 1).shape[0] >= ratio_threshold*a.shape[0]:
-            is_end = True
-        else:
-            second_max_value = round(np.max(a[a != max_value]), 1)
-            
-            if second_max_value >= max_value - dif_thresh:
-                a[a == max_value] = second_max_value
-            else:
-                a[a == max_value] = 0
-            
-    return a, valid_mask
-
-def check_truth(level, ratio, case):
-    if case == -3 and level == 0:
-        return -1
-    elif case == -3 and level != 0:
-        if ratio >= 0.15:
-            return 1
-        else:
-            return 0
-    elif case == -2 and level != 0:
-        return -1
-    else:
-        is_correct = 0
-        
-        if level == 0:
-            if ratio <= 0.25:
-                is_correct = 1
-            else:
-                is_correct = 0
-        elif level == 1:
-            if ratio >= 0.15 and ratio <= 0.55:
-                is_correct = 1
-            else:
-                is_correct = 0
-        elif level == 2:
-            if ratio >= 0.45 and ratio <= 0.75:
-                is_correct = 1
-            else:
-                is_correct = 0
-        elif level == 3:
-            if ratio >= 0.65:
-                is_correct = 1
-            else:
-                is_correct = 0
-        else:
-            if ratio >= 0.95:
-                is_correct = 1
-            else:
-                is_correct = 0
-        
-        if case in [-3, -1, -2] or level == case:
-            return is_correct
-        else:
-            return -1
-
-dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/tof_mra_julia/'
+option_idx = 2
+option = options[option_idx]
+dataset_dir = option['dataset_dir']
+pattern = option['pattern']
+chosen_arteries = option['arteries']
+is_replace = option['is_replace']
+org_pre_str = option['org_pre_str']
+org_post_str = option['org_post_str']
+seg_pre_str = option['seg_pre_str']
+seg_post_str = option['seg_post_str']
+sub_nums = []
 result_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/'
 
-pattern = re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz')
-sub_nums = []
-chosen_arteries = [1, 2, 3]
 neurologist_df = pd.read_csv('C:/Users/nguc4116/Desktop/artery_reconstruction/stenosis.csv', sep=',')
 neurologist_df['ID'] = neurologist_df['ID'].astype(str)
+checked_df = pd.read_csv('C:/Users/nguc4116/Desktop/checked_stenosis.csv', sep=',')
+checked_df['ID'] = checked_df['ID'].astype(str)
 
 mapping_names = {
     1: 'LICA',
@@ -123,7 +67,9 @@ mapping_names = {
     5: 'LACA',
     6: 'RACA',
     7: 'LMCA',
-    8: 'RMCA'
+    8: 'RMCA',
+    17: 'LAchA',
+    18: 'RAchA',
 }
 mapping_colors = {
     1: 'orange',
@@ -132,16 +78,24 @@ mapping_colors = {
     5: 'red',
     6: 'black',
     7: 'yellow',
-    8: 'pink'
+    8: 'pink',
+    17: 'purple',
+    18: 'gray',
 }
 
 stenosis_methods = {
-    1: '1. local_min/avg_global_avg',
-    2: '2. local_min/avg_global_min',
-    3: '3. local_min/avg_distal_min',
-    4: '4. local_min/avg_distal_avg',
-    5: '5. local_avg/avg_global_avg',
-    6: '6. local_avg/avg_distal_avg',
+    # 6: '1. local_avg/disprox_avg',
+    # 11: '2. local_avg/distal_avg',
+    # 12: '3. local_avg/proximal_avg',
+    # 5: '4. local_avg/global_avg',
+    1: 'A. local_min/global_avg',
+    # 2: '6. local_min/global_min',
+    # 3: '7. local_min/disprox_min',
+    # 7: '8. local_min/distal_min',
+    # 8: '9. local_min/proximal_min',
+    4: 'B. local_min/disprox_avg',
+    9: 'C. local_min/distal_avg',
+    10: 'D. local_min/proximal_avg',
 }
 
 metrics = {
@@ -155,13 +109,22 @@ metrics = {
     '4': 'stenosis level-4'
 }
 
-
+is_peak = True
 # Iterate over the files in the directory
 for filename in os.listdir(dataset_dir):
     match = pattern.match(filename)
     if match:
         index = match.group(1)
-        sub_nums.append(index)
+
+        if option_idx == 2:
+            checked_rows = checked_df[checked_df['ID'] == str(index)]
+        
+            if len(checked_rows) > 0:
+                checked_row = checked_rows.iloc[0]
+                if checked_row['valid'] in [1, 4, '1', '4']:
+                    sub_nums.append(index)
+                else:
+                    continue
 
 combined_info = {}
 metrics_values = [metrics[key] for key in metrics] 
@@ -198,7 +161,7 @@ for sub_num in sub_nums:
 app = Dash()
 
 app.layout =  html.Div([
-    html.H1(children='Artery stenosis map', style={'textAlign':'center'}),
+    html.H1(children='Artery stenosis report', style={'textAlign':'center'}),
     html.Div([
         html.Label('Percentage of artery length:', style={'width': '200px', 'textAlign': 'right', 'marginRight': '10px'}),
         html.Div([dcc.RangeSlider(
@@ -210,9 +173,8 @@ app.layout =  html.Div([
             value=[20, 80],  # Default value
         )], style={"width": "400px"})
     ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center', 'textAlign': 'center', 'marginBottom': '20px'}),
-    html.Div(id='graphs'),
+    html.Div(id='graphs', style={'display': 'flex', 'flexWrap': 'wrap'}),
 ])
-
 
 @callback(
     Output('graphs', 'children'),
@@ -228,13 +190,13 @@ def update_charts(len_percents):
     for key in chosen_arteries:
         error_df[mapping_names[key]] = {
             'min_diam': [],
-            'avg_diam': []
+            'avg_diam': [],
+            'min_diam_5vx': [],
+            'avg_diam_5vx': []
         }
 
-    
-
     for sub_num in sub_nums:
-        for art_idx in chosen_arteries:     
+        for art_idx in chosen_arteries: 
             #Read our measurements
             info_dir = result_dir + f"""{str(sub_num)}/measure_output_{str(art_idx)}.csv"""
             if os.path.isfile(info_dir):
@@ -247,60 +209,41 @@ def update_charts(len_percents):
                 combined_info[sub_num][art_idx]['min_diam'] = df['min_distances'][start_idx:end_idx].min()
                 combined_info[sub_num][art_idx]['avg_diam'] = round(df['avg_radius'][start_idx:end_idx].mean(), 2)
                 
-                error_df[mapping_names[art_idx]]['min_diam'].append(abs(combined_info[sub_num][art_idx]['neuro_diam'] - df['min_distances'][start_idx:end_idx].min()))
-                error_df[mapping_names[art_idx]]['avg_diam'].append(abs(combined_info[sub_num][art_idx]['neuro_diam'] - round(df['avg_radius'][start_idx:end_idx].mean(), 2)))
+                error_df[mapping_names[art_idx]]['min_diam'].append(combined_info[sub_num][art_idx]['neuro_diam'] - df['min_distances'][start_idx:end_idx].min())
+                error_df[mapping_names[art_idx]]['avg_diam'].append(combined_info[sub_num][art_idx]['neuro_diam'] - round(df['avg_radius'][start_idx:end_idx].mean(), 2))
+                error_df[mapping_names[art_idx]]['min_diam_5vx'].append(combined_info[sub_num][art_idx]['neuro_diam'] - round(df['min_distances'][start_idx:end_idx].min() - 5*0.375))
+                error_df[mapping_names[art_idx]]['avg_diam_5vx'].append(combined_info[sub_num][art_idx]['neuro_diam'] - round(df['avg_radius'][start_idx:end_idx].mean() - 5*0.375, 2))
 
                 results = {}
                 for key in stenosis_methods:
                     method_name = stenosis_methods[key]
                     result = {}
 
-                    if key == 1:
+
+                    if key == 1: #local_min/avg_global_avg
                         result['ratio'] = round((1-df['min_distances'][start_idx:end_idx]/avg_avg_diameter).max(), 2)
-                    elif key == 2:
+                    elif key == 2: #local_min/avg_global_min
                         result['ratio'] = max(round((1-df['min_distances'][start_idx:end_idx]/avg_min_diameter).max(), 2), 0)
-                    elif key == 3:
-                        result['ratio'] = round((df['stenosis_ratio_min'][start_idx:end_idx]).max(), 2)
-                    elif key == 4:
-                        ref_min_distances = []
-                        ref_avg_distances = []
-                        avg_distances = df['avg_radius']
-                        ratio_threshold = 0.1
-                        distance_threshold = 0.5
-                        distance = (1/10)*len(df['avg_radius'])*distance_threshold
-                        interval_size = distance_threshold
-
-                        for i in range(len(df['min_distances'])):
-                            dif_thresh = 0.5*avg_distances[i]
-
-                            avg_distance = max_stable_mask(np.array(avg_distances), i, ratio_threshold, distance, interval_size, dif_thresh)                        
-                            ref_avg_distances.append(avg_distance)
-                        
-                        is_stop = False
-                        while not is_stop:
-                            is_stop = True
-                            for idx, ring in enumerate(avg_distances):
-                                neighbor_avg_distances = []
-
-                                if ref_avg_distances[idx] == None:
-                                    if idx > 0 and ref_avg_distances[idx-1] != None:
-                                        neighbor_avg_distances.append(ref_avg_distances[idx-1])
-                                    if idx < (len(avg_distances) - 1) and ref_avg_distances[idx+1] != None:
-                                        neighbor_avg_distances.append(ref_avg_distances[idx+1])
-
-                                    if len(neighbor_avg_distances):
-                                        ref_avg_distances[idx] = np.mean(np.array(neighbor_avg_distances))
-
-                            undefined_ranges = [distance for distance in ref_avg_distances if distance == 0 or distance is None]
-                            if len(undefined_ranges):
-                                is_stop = False
-
-                        stenosis_ratio_avg = np.array(df['min_distances'])/np.array(ref_avg_distances)
-                        result['ratio'] = max(round((1-stenosis_ratio_avg[start_idx:end_idx]).max(), 2), 0)
-                    elif key == 5:
+                    elif key == 3: #local_min/avg_disprox_min
+                        result['ratio'] = find_stenosis_ratio(start_idx, end_idx, df['min_distances'], df['min_distances'], side=0, length_percentage=0.1, is_peak=is_peak)
+                    elif key == 4: #local_min/avg_disprox_avg
+                        result['ratio'] = find_stenosis_ratio(start_idx, end_idx, df['min_distances'], df['avg_radius'], side=0, length_percentage=0.1, is_peak=is_peak)
+                    elif key == 5: #local_avg/avg_global_avg
                         result['ratio'] = max(round((1-df['avg_radius'][start_idx:end_idx]/avg_avg_diameter).max(), 2), 0)
-                    elif key == 6:
-                        result['ratio'] = round((df['stenosis_ratio_avg'][start_idx:end_idx]).max(), 2)
+                    elif key == 6: #local_avg/avg_disprox_avg                        
+                        result['ratio'] = find_stenosis_ratio(start_idx, end_idx, df['avg_radius'], df['avg_radius'], side=0, length_percentage=0.1, is_peak=is_peak)
+                    elif key == 7: #local_min/avg_distal_min                        
+                        result['ratio'] = find_stenosis_ratio(start_idx, end_idx, df['min_distances'], df['min_distances'], side=2, length_percentage=0.1, is_peak=is_peak)
+                    elif key == 8: #local_min/avg_proximal_min                        
+                        result['ratio'] = find_stenosis_ratio(start_idx, end_idx, df['min_distances'], df['min_distances'], side=1, length_percentage=0.1, is_peak=is_peak)
+                    elif key == 9: #local_min/avg_distal_avg                        
+                        result['ratio'] = find_stenosis_ratio(start_idx, end_idx, df['min_distances'], df['avg_radius'], side=2, length_percentage=0.1, is_peak=is_peak)
+                    elif key == 10: #local_min/avg_proximal_avg                        
+                        result['ratio'] = find_stenosis_ratio(start_idx, end_idx, df['min_distances'], df['avg_radius'], side=1, length_percentage=0.1, is_peak=is_peak)
+                    elif key == 11: #local_avg/avg_distal_avg                        
+                        result['ratio'] = find_stenosis_ratio(start_idx, end_idx, df['avg_radius'], df['avg_radius'], side=2, length_percentage=0.1, is_peak=is_peak)
+                    elif key == 12: #local_avg/avg_proximal_avg                        
+                        result['ratio'] = find_stenosis_ratio(start_idx, end_idx, df['avg_radius'], df['avg_radius'], side=1, length_percentage=0.1, is_peak=is_peak)
                     else:
                         result['ratio'] = 'N/A'
 
@@ -325,42 +268,86 @@ def update_charts(len_percents):
 
     figures = []
 
+    # Extract keys and values from the data structure
+    artery_names = list(error_df.keys())
+    min_distances_values = [error_df[artery]['min_diam'] for artery in artery_names]
+    avg_distances_values = [error_df[artery]['avg_diam'] for artery in artery_names]
+    min_distances_5vx_values = [error_df[artery]['min_diam_5vx'] for artery in artery_names]
+    avg_distances_5vx_values = [error_df[artery]['avg_diam_5vx'] for artery in artery_names]
+    artery_names_qty = [f"{artery}_({str(len(error_df[artery]['min_diam']))})" for artery in artery_names]
 
-    # for art_idx in chosen_arteries:     
-    #     error_df[mapping_names[art_idx]]['min_diam'] = np.array(error_df[mapping_names[art_idx]]['min_diam']).mean()
-    #     error_df[mapping_names[art_idx]]['avg_diam'] = np.array(error_df[mapping_names[art_idx]]['avg_diam']).mean()
 
     # Extract keys and values from the data structure
     artery_names = list(error_df.keys())
-    min_distances_values = [np.array(error_df[artery]['min_diam']).mean() for artery in artery_names]
-    avg_distances_values = [np.array(error_df[artery]['avg_diam']).mean() for artery in artery_names]
-    artery_names_qty = [f"{artery}_({str(len(error_df[artery]['min_diam']))})" for artery in artery_names]
+
+    # Prepare data for the violin plots
+    min_distances = []
+    avg_distances = []
+    arteries_min = []
+    arteries_avg = []
+    min_5vx_distances = []
+    avg_5vx_distances = []
+    arteries_min_5vx = []
+    arteries_avg_5vx = []
+
+    for artery in artery_names:
+        min_distances.extend(error_df[artery]['min_diam'])
+        avg_distances.extend(error_df[artery]['avg_diam'])
+        min_5vx_distances.extend(error_df[artery]['min_diam_5vx'])
+        avg_5vx_distances.extend(error_df[artery]['avg_diam_5vx'])
+        arteries_min.extend([f"{artery}_({len(error_df[artery]['min_diam'])})"] * len(error_df[artery]['min_diam']))
+        arteries_avg.extend([f"{artery}_({len(error_df[artery]['avg_diam'])})"] * len(error_df[artery]['avg_diam']))
+        arteries_min_5vx.extend([f"{artery}_({len(error_df[artery]['min_diam_5vx'])})"] * len(error_df[artery]['min_diam_5vx']))
+        arteries_avg_5vx.extend([f"{artery}_({len(error_df[artery]['avg_diam_5vx'])})"] * len(error_df[artery]['avg_diam_5vx']))
 
     # Create the figure
     fig = go.Figure()
 
     # Add traces for min_distances and avg_distances
-    fig.add_trace(go.Bar(
-        x=artery_names_qty,
-        y=min_distances_values,
-        name='min_distances'
+    fig.add_trace(go.Violin(
+        x=arteries_min,
+        y=min_distances,
+        name='min_distances',
+        box_visible=True,
+        meanline_visible=True
     ))
 
-    fig.add_trace(go.Bar(
-        x=artery_names_qty,
-        y=avg_distances_values,
-        name='avg_distances'
+    fig.add_trace(go.Violin(
+        x=arteries_avg,
+        y=avg_distances,
+        name='avg_distances',
+        box_visible=True,
+        meanline_visible=True
     ))
+
+    # Add traces for min_distances and avg_distances
+    fig.add_trace(go.Violin(
+        x=arteries_min_5vx,
+        y=min_5vx_distances,
+        name='min_distances_5vx',
+        box_visible=True,
+        meanline_visible=True
+    ))
+
+    fig.add_trace(go.Violin(
+        x=arteries_avg_5vx,
+        y=avg_5vx_distances,
+        name='avg_distances_5vx',
+        box_visible=True,
+        meanline_visible=True
+    ))
+    
 
     # Update layout
     fig.update_layout(
-        barmode='group',
+        title_x=0.5,
         xaxis=dict(title='Arteries'),
         yaxis=dict(title='Diameter error (mm)'),
-        title='Comparison of Diameter error by Arteries'
+        title="Comparison of Diameter error by Arteries (Neuro's diameter - Our diameter)",
+        violinmode='group'
     )
 
-    figures.append(dcc.Graph(figure=fig))
+    figures.append(dcc.Graph(figure=fig, style={'width': '100%'}))
     # Group by Metrics and calculate accuracy for each Method
     for metric, group in combined_df.groupby('Metrics'):
         metric_accuracy = []
@@ -370,9 +357,8 @@ def update_charts(len_percents):
             concatenated_wrong_points = sum(df_method['Wrong_Points'], [])
             accuracy = 100 * df_method['True_Prediction'].sum() / df_method['Total_Samples'].sum()
             total_samples = df_method['Total_Samples'].sum()
-            metric_accuracy.append({'Method': method, 'Accuracy': accuracy, 'Wrong_Points': concatenated_wrong_points})
+            metric_accuracy.append({'Method': method, 'Accuracy': round(accuracy, 2), 'Wrong_Points': concatenated_wrong_points})
 
-        print(metric_accuracy)
         # Create a bar chart for each metric
         df_metric_accuracy = pd.DataFrame(metric_accuracy)
         fig = px.bar(
@@ -380,11 +366,12 @@ def update_charts(len_percents):
             x='Method',
             y='Accuracy',
             text='Accuracy',
-            title=f'Accuracy of {metric} prediction by methods ({total_samples} arteries)',
+            title=f'Accuracy of {metric} prediction by methods ({total_samples} samples)',
             labels={'Method': 'Methods', 'Accuracy': 'Accuracy (%)'}
         )
         fig.update_layout(title_x=0.5)
-        figures.append(dcc.Graph(figure=fig))
+        fig.update_yaxes(range=[0, 100])
+        figures.append(dcc.Graph(figure=fig, style={'width': '50%'}))
 
 
         # Prepare data for Plotly
@@ -393,12 +380,13 @@ def update_charts(len_percents):
             method = method_data['Method']
             wrong_points = method_data['Wrong_Points']
             
-            fig.add_trace(go.Scatter(
+            fig.add_trace(go.Violin(
                 x=[method] * len(wrong_points),
                 y=wrong_points,
-                mode='markers',
                 name=method,
-                marker=dict(symbol='circle', size=10)
+                box_visible=True,  # Show box plot inside the violin
+                meanline_visible=True,
+                showlegend=False,
             ))
 
         if metric == 'stenosis':
@@ -434,12 +422,16 @@ def update_charts(len_percents):
         # Update layout for grouped bar chart
         fig.update_layout(
             barmode='group',
-            title=f'Wrong points in {metric} prediction by methods ({total_samples} arteries)',
             xaxis_title='Methods',
             yaxis_title='Stenosis percentage (%)',
-            yaxis=dict(range=[0, 100])
+            yaxis=dict(range=[-10, 140]), 
+            title=dict(
+                text=f'Distribution of incorrect prediction ({metric}) by methods ({total_samples} samples)',
+                x=0.5,  # Centers the title
+                xanchor='center'
+            )
         )
-        figures.append(dcc.Graph(figure=fig))
+        figures.append(dcc.Graph(figure=fig, style={'width': '50%'}))
 
 
 
@@ -469,7 +461,8 @@ def update_charts(len_percents):
             labels={'method': 'Methods', 'accuracy': 'Accuracy (%)'}
         )
         fig.update_layout(title_x=0.5)
-        figures.append(dcc.Graph(figure=fig))
+        fig.update_yaxes(range=[0, 100])
+        figures.append(dcc.Graph(figure=fig, style={'width': '50%'}))
 
     # Create bar charts for each metric
     for metric, metric_data in pd.DataFrame(figures_data).groupby('metric'):
@@ -485,9 +478,10 @@ def update_charts(len_percents):
         )
     
         fig.update_layout(title_x=0.5)
-        figures.append(dcc.Graph(figure=fig))
+        fig.update_yaxes(range=[0, 100])
+        figures.append(dcc.Graph(figure=fig, style={'width': '50%'}))
 
     return figures
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8051)
+    app.run(debug=True, host='0.0.0.0', port=8052)

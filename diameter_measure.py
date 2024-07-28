@@ -1,6 +1,7 @@
 import skeletor as sk
 import nibabel as nib
 import numpy as np
+import pandas as pd
 
 from collections import deque
 from skimage.morphology import skeletonize, thin
@@ -8,6 +9,7 @@ from skimage import measure
 from scipy.ndimage import binary_dilation, center_of_mass
 
 from scipy.spatial import KDTree, distance_matrix
+from scipy.ndimage import distance_transform_edt
 from sklearn.cluster import DBSCAN, KMeans
 
 import matplotlib.pyplot as plt
@@ -48,7 +50,7 @@ from scipy.spatial.transform import Rotation as R
 def contract_mesh(vertices, faces, normal_vectors):
     mesh = tm.Trimesh(vertices=vertices, faces=faces, vertex_normals=normal_vectors)
     # fixed = sk.pre.fix_mesh(mesh, remove_disconnected=5, inplace=False)
-    skel = sk.skeletonize.by_wavefront(mesh, waves=1, step_size=1)
+    skel = sk.skeletonize.by_wavefront(mesh, waves=3, step_size=1)
 
     return skel
 
@@ -738,7 +740,8 @@ def extend_list(start_list_idx, list_of_lists, extend_at, points, voxel_sizes):
     longest_extended_list = recursive_extend(extended_list, used_indices, current_point, extend_at)
     return list(longest_extended_list)
 
-def remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes, len_threshold=10):
+def remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes):
+    print(len(connected_lines), connected_lines)
     remove_list = []
     add_list = []
     
@@ -1053,32 +1056,90 @@ def vmtk_decimate_mesh(vertices, faces, target_faces=7000):
     print(vmtk_faces.shape[0])
     return vmtk_vertices, vmtk_faces
 
+mapping_names = {
+    1: 'LICA',
+    2: 'RICA',
+    3: 'BA',
+    5: 'LACA',
+    6: 'RACA',
+    7: 'LMCA',
+    8: 'RMCA',
+    17: 'LAchA',
+    18: 'RAchA',
+}
+
 # Initialize
-dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/tof_mra_julia/'
-dataset_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/pascal/'
-info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/'
-# pattern = re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz')
-pattern = re.compile(r'^PT_(.*?)_ToF_eICAB_CW\.nii\.gz$')
+options = [
+    {
+        'dataset_dir': 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/tof_mra_julia/',
+        'pattern': re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz'),
+        'arteries': [1, 2, 3],
+        'is_replace': True,
+        'org_pre_str': 'sub-',
+        'org_post_str': '_run-1_mra_eICAB_CW.nii.gz',
+        'seg_pre_str': 'sub-',
+        'seg_post_str': '_run-1_mra_resampled.nii.gz',
+    }, {
+        'dataset_dir': 'E:/pascal/',
+        'pattern': re.compile(r'^PT_(.*?)_ToF_eICAB_CW\.nii\.gz$'),
+        'arteries': [17, 18],
+        'is_replace': True,
+        'org_pre_str': 'PT_',
+        'org_post_str': '_ToF_eICAB_CW.nii.gz',
+        'seg_pre_str': 'PT_',
+        'seg_post_str': '_ToF_resampled.nii.gz',
+    }, {
+        'dataset_dir': 'E:/stenosis/',
+        'pattern': re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz'),
+        'arteries': [1, 2, 3],
+        'is_replace': True,
+        'org_pre_str': 'sub-',
+        'org_post_str': '_run-1_mra_eICAB_CW.nii.gz',
+        'seg_pre_str': 'sub-',
+        'seg_post_str': '_run-1_mra_resampled.nii.gz',
+    }
+]
+
+option_idx = 2
+option = options[option_idx]
+dataset_dir = option['dataset_dir']
+pattern = option['pattern']
+chosen_arteries = option['arteries']
+is_replace = option['is_replace']
+org_pre_str = option['org_pre_str']
+org_post_str = option['org_post_str']
+seg_pre_str = option['seg_pre_str']
+seg_post_str = option['seg_post_str']
 sub_nums = []
+result_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/'
+
+dataset_name = dataset_dir.split('/')[-2]
+log_file_dir = result_dir + dataset_name + '.txt'
+with open(log_file_dir , 'w') as file:
+    pass
+
+with open(log_file_dir, 'r') as file:
+    lines = file.readlines()
+    lines = [line.strip() for line in lines]
 
 # Iterate over the files in the directory
 for filename in os.listdir(dataset_dir):
     match = pattern.match(filename)
     if match:
         index = match.group(1)
+        if '53' in index:
+            sub_nums.append(str(index))
+        # print(f'Extracted INDEX: {index} from filename: {filename}')
 
-        sub_nums.append(index)
-        # if str(index) not in os.listdir(info_dir):
-        #     sub_nums.append(index)
+# if not os.path.isfile(info_dir + str(sub_num)):
+# # sub_nums = [sub_num for sub_num in sub_nums if not sub_num.startswith('10')]
 
-        print(f'Extracted INDEX: {index} from filename: {filename}')
+if option_idx == 2:
+    stenosis_df = pd.read_csv('C:/Users/nguc4116/Desktop/filtered_stenosis_all.csv', sep=',')
 
-for sub_num in sub_nums:
-    segment_file_path = dataset_dir + f'PT_{str(sub_num)}_ToF_eICAB_CW.nii.gz'
-    original_file_path = dataset_dir + f'PT_{str(sub_num)}_ToF_resampled.nii.gz'
-    # segment_file_path = dataset_dir + 'sub-581_run-1_mra_eICAB_CW.nii.gz'
-    # original_file_path = dataset_dir + 'sub-581_run-1_mra_resampled.nii.gz'
-    # centerline_file_path = dataset_dir + 'sub-9_run-1_mra_CircleOfWillis_centerline.nii.gz'
+for sub_num in ['1509']:
+    segment_file_path = dataset_dir + f'{org_pre_str}{str(sub_num)}{org_post_str}'
+    original_file_path = dataset_dir + f'{seg_pre_str}{str(sub_num)}{seg_post_str}'
 
     segment_image = nib.load(segment_file_path)
     original_image = nib.load(original_file_path)
@@ -1096,80 +1157,92 @@ for sub_num in sub_nums:
 
     original_data = original_image.get_fdata()
     segment_data = segment_image.get_fdata()
-    # centerline_data = centerline_image.get_fdata()
     voxel_sizes = segment_image.header.get_zooms()
-    info_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/' + str(sub_num) + '/'
+    info_dir = result_dir + str(sub_num) + '/'
     check_and_create_directory(info_dir)
 
-    for artery_index in [5, 6, 7, 8]:
-        print('Artery ', artery_index)
+    for artery_index in [1]:
+        try:
+            # if stenosis in ['0', 0]:
+            #     continue
+            # if os.path.isfile(info_dir + f'smooth_points_{artery_index}.txt') or (sub_num == 'PL049_V3' and artery_index == 6):
+            #     continue
 
-        if os.path.isfile(info_dir + f'smooth_points_{artery_index}.txt') or (sub_num == 'PL049_V3' and artery_index == 6):
+            ## For treated kising vessels
+            # processed_mask = segment_data
+
+            ## For untreated kissing vessels
+            if artery_index in [1, 2]:
+                processed_mask = find_skeleton_ica(segment_image, original_image, artery_index , 0.5, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
+                processed_mask = remove_noisy_voxels(processed_mask, neighbor_threshold_1, True)
+            else:
+                # For normal artery
+                processed_mask, cf_mask, surf_data = preprocess_data(original_data, segment_data, [artery_index], intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
+
+
+            # Extract smooth centerline
+            skeleton = skeletonize(processed_mask)
+            skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
+            distance_tranform = distance_transform_edt(processed_mask)
+            boundary = np.argwhere(distance_tranform==1)
+
+            if len(connected_lines) > 1:
+                skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, len_threshold=8)
+
+            if len(connected_lines) == 0:
+                continue 
+
+            skeleton, connected_lines, end_points, junction_points = remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes)
+            
+            visualized_bound_points = generate_points(voxel_sizes*(boundary+0.5), 1, 'blue')
+            visualized_skeleton_points = generate_points(voxel_sizes*(np.argwhere(skeleton!=0)+0.5), 3, 'red')
+            visualized_junc_points = generate_points(voxel_sizes*(skeleton_points+0.5)[junction_points], 3, 'blue')
+            show_figure([visualized_skeleton_points, visualized_junc_points, visualized_bound_points])
+
+
+            connected_lines, skeleton, skeleton_points = extend_skeleton(connected_lines, end_points, skeleton_points, original_data, processed_mask, skeleton, voxel_sizes)
+            
+            vertices, faces, normals, values = measure.marching_cubes(skeleton, level=0.5, spacing=voxel_sizes)
+            skeleton_points = voxel_sizes*(skeleton_points+0.5)
+            visualized_boundary_points = generate_points(vertices, 1, 'blue')
+
+            line_traces = []
+            for line in connected_lines:
+                for idx in range(len(line)-1):
+                    line_traces.append(generate_lines(np.array([skeleton_points[line[idx]], skeleton_points[line[idx+1]]]), 2))
+
+            # vmtk_skeleton_vertices, vmtk_skeleton_faces = vmtk_smooth_mesh(vertices, faces, 2000)
+            skel = contract_mesh(vertices, faces, normals)
+            visualized_vertices = generate_points(vertices, 1, 'red')
+            vmtk_skeleton_vertices = skel.vertices
+            smooth_points, smooth_connected_lines = smooth_centerline(vmtk_skeleton_vertices, skeleton_points, connected_lines)
+
+            # Extract boundary
+            vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.5, spacing=voxel_sizes)
+            target_faces = 15000
+            # if (faces.shape[0] > target_faces):
+            vertices, faces = vmtk_decimate_mesh(vertices, faces, target_faces)
+
+            vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 20, 1)
+
+            np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
+            np.savetxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')
+            np.savetxt(info_dir + f'vmtk_boundary_faces_{artery_index}.txt', vmtk_boundary_faces, delimiter=',', fmt='%.2f')
+            with open(info_dir + f'smooth_connected_lines_{artery_index}.json', 'w') as file:
+                json.dump(smooth_connected_lines, file)  # indent=4 makes the file more readable
+
+            # for line in smooth_connected_lines:
+            #     for idx in range(len(line)-1):
+            #         line_traces.append(generate_lines(np.array([smooth_points[line[idx]], smooth_points[line[idx+1]]]), 2, 'green'))
+            
+            # visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
+            # visualized_boundary_vertices = generate_points(vmtk_boundary_vertices, 1, 'blue')
+            # visualized_smooth_points = generate_points(vmtk_skeleton_vertices, 2, 'green')
+            # show_figure([visualized_boundary_vertices, visualized_smooth_points, visualized_vertices]+line_traces)
+        except Exception as e:
+            print(e)
             continue
 
-        ## For treated kising vessels
-        # processed_mask = segment_data
-
-        ## For untreated kissing vessels
-        if artery_index in [1, 2]:
-            processed_mask = find_skeleton_ica(segment_image, original_image, artery_index , 0.5, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
-            processed_mask = remove_noisy_voxels(processed_mask, neighbor_threshold_1, True)
-        else:
-            # For normal artery
-            processed_mask, cf_mask, surf_data = preprocess_data(original_data, segment_data, [artery_index], intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
-
-
-        # Extract smooth centerline
-        skeleton = skeletonize(processed_mask)
-        skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
-
-        if len(connected_lines) > 1:
-            skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, len_threshold)
-
-        visualized_skeleton_points = generate_points(voxel_sizes*(skeleton_points+0.5), 3, 'red')
-        visualized_junc_points = generate_points(voxel_sizes*(skeleton_points+0.5)[junction_points], 3, 'blue')
-        # show_figure([visualized_skeleton_points, visualized_junc_points])
-
-        if len(connected_lines) == 0:
-            continue 
-
-        skeleton, connected_lines, end_points, junction_points = remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes, len_threshold)
-        connected_lines, skeleton, skeleton_points = extend_skeleton(connected_lines, end_points, skeleton_points, original_data, processed_mask, skeleton, voxel_sizes)
-        
-        vertices, faces, normals, values = measure.marching_cubes(skeleton, level=0.5, spacing=voxel_sizes)
-        skeleton_points = voxel_sizes*(skeleton_points+0.5)
-        visualized_boundary_points = generate_points(vertices, 1, 'blue')
-
-        line_traces = []
-        for line in connected_lines:
-            for idx in range(len(line)-1):
-                line_traces.append(generate_lines(np.array([skeleton_points[line[idx]], skeleton_points[line[idx+1]]]), 2))
-
-        # vmtk_skeleton_vertices, vmtk_skeleton_faces = vmtk_smooth_mesh(vertices, faces, 2000)
-        skel = contract_mesh(vertices, faces, normals)
-        visualized_vertices = generate_points(vertices, 1, 'red')
-        vmtk_skeleton_vertices = skel.vertices
-        smooth_points, smooth_connected_lines = smooth_centerline(vmtk_skeleton_vertices, skeleton_points, connected_lines)
-
-        # Extract boundary
-        vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.1, spacing=voxel_sizes)
-        target_faces = 15000
-        # if (faces.shape[0] > target_faces):
-        vertices, faces = vmtk_decimate_mesh(vertices, faces, target_faces)
-
-        vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 20, 1)
-
-        np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
-        np.savetxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')
-        np.savetxt(info_dir + f'vmtk_boundary_faces_{artery_index}.txt', vmtk_boundary_faces, delimiter=',', fmt='%.2f')
-        with open(info_dir + f'smooth_connected_lines_{artery_index}.json', 'w') as file:
-            json.dump(smooth_connected_lines, file)  # indent=4 makes the file more readable
-
-        for line in smooth_connected_lines:
-            for idx in range(len(line)-1):
-                line_traces.append(generate_lines(np.array([smooth_points[line[idx]], smooth_points[line[idx+1]]]), 2, 'green'))
-        
-        visualized_skeleton_points = generate_points(skeleton_points, 3, 'red')
-        visualized_boundary_vertices = generate_points(vmtk_boundary_vertices, 1, 'blue')
-        visualized_smooth_points = generate_points(vmtk_skeleton_vertices, 2, 'green')
-        # show_figure([visualized_boundary_vertices, visualized_smooth_points, visualized_vertices]+line_traces)
+    with open(log_file_dir, 'a') as file:
+        file.write(f'\n{str(sub_num)}')
+    
