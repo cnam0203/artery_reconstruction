@@ -2,6 +2,7 @@ import skeletor as sk
 import nibabel as nib
 import numpy as np
 import pandas as pd
+import open3d as o3d
 
 from collections import deque
 from skimage.morphology import skeletonize, thin
@@ -630,7 +631,7 @@ def extend_branch(branch_idx, point_idx, remove_list, add_list, connected_lines,
             theta_radians = np.arccos(cos_theta)
             angle = np.degrees(theta_radians)
 
-            print('Line ', branch_idx, angle, idx, find_actual_length(result_head, points, voxel_sizes))
+            # print('Line ', branch_idx, angle, idx, find_actual_length(result_head, points, voxel_sizes))
 
             if max_idx == None:
                 max_angle = angle
@@ -662,14 +663,14 @@ def extend_branch(branch_idx, point_idx, remove_list, add_list, connected_lines,
                         max_head = head
                         max_weighted_len = find_actual_length(result_head, points, voxel_sizes)
 
-            print('Line ', branch_idx, max_idx, max_weighted_len, max_angle)
+            # print('Line ', branch_idx, max_idx, max_weighted_len, max_angle)
 
         add_list.append(max_idx)
         for idx in considered_lines:
             if idx != max_idx:
                 remove_list.append(idx)
 
-        print(add_list, remove_list, len(connected_lines))
+        # print(add_list, remove_list, len(connected_lines))
         return extend_branch(max_idx, max_head, remove_list, add_list, connected_lines, points, voxel_sizes)
 
 def find_actual_length(list_points, points, voxel_sizes):
@@ -741,7 +742,7 @@ def extend_list(start_list_idx, list_of_lists, extend_at, points, voxel_sizes):
     return list(longest_extended_list)
 
 def remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes):
-    print(len(connected_lines), connected_lines)
+    # print(len(connected_lines), connected_lines)
     remove_list = []
     add_list = []
     
@@ -997,9 +998,9 @@ def perpendicular_planes(point1, point2):
     return v1, v2
 
 def vmtk_decimate_mesh(vertices, faces, target_faces=7000):
-    print('Before: ')
-    print(vertices.shape[0])
-    print(faces.shape[0])
+    # print('Before: ')
+    # print(vertices.shape[0])
+    # print(faces.shape[0])
 
     surface_data = vtk.vtkPolyData()
     points = vtk.vtkPoints()
@@ -1051,9 +1052,9 @@ def vmtk_decimate_mesh(vertices, faces, target_faces=7000):
     vmtk_vertices = np.array(vmtk_vertices)
     vmtk_faces = np.array(vmtk_faces)
 
-    print('After: ')
-    print(vmtk_vertices.shape[0])
-    print(vmtk_faces.shape[0])
+    # print('After: ')
+    # print(vmtk_vertices.shape[0])
+    # print(vmtk_faces.shape[0])
     return vmtk_vertices, vmtk_faces
 
 mapping_names = {
@@ -1064,6 +1065,10 @@ mapping_names = {
     6: 'RACA',
     7: 'LMCA',
     8: 'RMCA',
+    11: 'LPCA',
+    12: 'RPCA',
+    13: 'LPCA1',
+    14: 'RPCA2',
     17: 'LAchA',
     18: 'RAchA',
 }
@@ -1091,7 +1096,7 @@ options = [
     }, {
         'dataset_dir': 'E:/stenosis/',
         'pattern': re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz'),
-        'arteries': [1, 2, 3],
+        'arteries': [5, 6, 7, 8, 11, 12],
         'is_replace': True,
         'org_pre_str': 'sub-',
         'org_post_str': '_run-1_mra_eICAB_CW.nii.gz',
@@ -1115,35 +1120,34 @@ result_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/'
 
 dataset_name = dataset_dir.split('/')[-2]
 log_file_dir = result_dir + dataset_name + '.txt'
-with open(log_file_dir , 'w') as file:
-    pass
+# with open(log_file_dir , 'w') as file:
+#     pass
 
-with open(log_file_dir, 'r') as file:
-    lines = file.readlines()
-    lines = [line.strip() for line in lines]
+# with open(log_file_dir, 'r') as file:
+#     lines = file.readlines()
+#     lines = [line.strip() for line in lines]
 
 # Iterate over the files in the directory
 for filename in os.listdir(dataset_dir):
     match = pattern.match(filename)
     if match:
         index = match.group(1)
-        if '53' in index:
-            sub_nums.append(str(index))
+        sub_nums.append(int(index))
         # print(f'Extracted INDEX: {index} from filename: {filename}')
 
-# if not os.path.isfile(info_dir + str(sub_num)):
-# # sub_nums = [sub_num for sub_num in sub_nums if not sub_num.startswith('10')]
-
 if option_idx == 2:
-    stenosis_df = pd.read_csv('C:/Users/nguc4116/Desktop/filtered_stenosis_all.csv', sep=',')
+    neurologist_df = pd.read_csv('C:/Users/nguc4116/Downloads/nomas_mra.csv', sep=',')
+    neurologist_df['ID'] = neurologist_df['ID'].astype(str)
+sub_nums.sort()
 
-for sub_num in ['1509']:
+for sub_num in ['53']:
+
+    sub_num = str(sub_num)
     segment_file_path = dataset_dir + f'{org_pre_str}{str(sub_num)}{org_post_str}'
     original_file_path = dataset_dir + f'{seg_pre_str}{str(sub_num)}{seg_post_str}'
 
     segment_image = nib.load(segment_file_path)
     original_image = nib.load(original_file_path)
-    # centerline_image = nib.load(centerline_file_path)
 
     intensity_threshold_1 = 0.1
     intensity_threshold_2 = 0.1
@@ -1161,19 +1165,22 @@ for sub_num in ['1509']:
     info_dir = result_dir + str(sub_num) + '/'
     check_and_create_directory(info_dir)
 
-    for artery_index in [1]:
+    for artery_index in [11, 12]:
         try:
-            # if stenosis in ['0', 0]:
-            #     continue
-            # if os.path.isfile(info_dir + f'smooth_points_{artery_index}.txt') or (sub_num == 'PL049_V3' and artery_index == 6):
+            print(artery_index)
+
+            # if os.path.exists(info_dir + f'smooth_points_{artery_index}.txt'):
             #     continue
 
-            ## For treated kising vessels
-            # processed_mask = segment_data
+            # neuro_row = neurologist_df[neurologist_df['ID'] == str(sub_num)].iloc[0]
+            # sten_col_name = mapping_names[artery_index] + '_stenosis'
+            # neuro_sten = int(neuro_row.get(sten_col_name.lower(), 0))
+            # if neuro_sten != 1:
+            #     continue
 
             ## For untreated kissing vessels
             if artery_index in [1, 2]:
-                processed_mask = find_skeleton_ica(segment_image, original_image, artery_index , 0.5, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
+                processed_mask = find_skeleton_ica(segment_image, original_image, artery_index , 0.65, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2)
                 processed_mask = remove_noisy_voxels(processed_mask, neighbor_threshold_1, True)
             else:
                 # For normal artery
@@ -1181,10 +1188,13 @@ for sub_num in ['1509']:
 
 
             # Extract smooth centerline
-            skeleton = skeletonize(processed_mask)
-            skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
             distance_tranform = distance_transform_edt(processed_mask)
             boundary = np.argwhere(distance_tranform==1)
+
+            thinning_mask = np.copy(processed_mask)
+            thinning_mask[distance_tranform==1] = 0
+            skeleton = skeletonize(thinning_mask)
+            skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
 
             if len(connected_lines) > 1:
                 skeleton, connected_lines, end_points, junction_points = remove_short_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, len_threshold=8)
@@ -1192,14 +1202,13 @@ for sub_num in ['1509']:
             if len(connected_lines) == 0:
                 continue 
 
-            skeleton, connected_lines, end_points, junction_points = remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes)
-            
             visualized_bound_points = generate_points(voxel_sizes*(boundary+0.5), 1, 'blue')
             visualized_skeleton_points = generate_points(voxel_sizes*(np.argwhere(skeleton!=0)+0.5), 3, 'red')
             visualized_junc_points = generate_points(voxel_sizes*(skeleton_points+0.5)[junction_points], 3, 'blue')
-            show_figure([visualized_skeleton_points, visualized_junc_points, visualized_bound_points])
+            # show_figure([visualized_skeleton_points, visualized_junc_points, visualized_bound_points])
 
 
+            skeleton, connected_lines, end_points, junction_points = remove_redundant_branch(skeleton, skeleton_points, end_points, junction_points, connected_lines, voxel_sizes)
             connected_lines, skeleton, skeleton_points = extend_skeleton(connected_lines, end_points, skeleton_points, original_data, processed_mask, skeleton, voxel_sizes)
             
             vertices, faces, normals, values = measure.marching_cubes(skeleton, level=0.5, spacing=voxel_sizes)
@@ -1220,10 +1229,9 @@ for sub_num in ['1509']:
             # Extract boundary
             vertices, faces, normals, values = measure.marching_cubes(processed_mask, level=0.5, spacing=voxel_sizes)
             target_faces = 15000
-            # if (faces.shape[0] > target_faces):
             vertices, faces = vmtk_decimate_mesh(vertices, faces, target_faces)
-
             vmtk_boundary_vertices, vmtk_boundary_faces = vmtk_smooth_mesh(vertices, faces, 20, 1)
+            
 
             np.savetxt(info_dir + f'smooth_points_{artery_index}.txt', smooth_points, delimiter=',', fmt='%.2f')
             np.savetxt(info_dir + f'vmtk_boundary_vertices_{artery_index}.txt', vmtk_boundary_vertices, delimiter=',', fmt='%.2f')
@@ -1243,6 +1251,6 @@ for sub_num in ['1509']:
             print(e)
             continue
 
-    with open(log_file_dir, 'a') as file:
-        file.write(f'\n{str(sub_num)}')
+    # # with open(log_file_dir, 'a') as file:
+    # #     file.write(f'\n{str(sub_num)}')
     

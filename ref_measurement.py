@@ -24,13 +24,25 @@ def max_stable_mask(a, pos, ratio_threshold, distance, interval_size, dif_thresh
     #     right_values, right_mask = side_stable_mask(right_arr, ratio_threshold, dif_thresh)
     #     right_radius = np.mean(right_values[right_mask == 1])
 
-    if pos - pass_steps - 4 >= 0 and side in [0, 1]:
-        left_arr = a[pos - pass_steps - 4 : pos - pass_steps]
-        left_radius = np.mean(left_arr)
+    if side in [0, 1]:
+        if pos - pass_steps - 4 >= 0:
+            left_arr = a[pos - pass_steps - 4 : pos - pass_steps]
+            left_radius = np.mean(left_arr)
+        if pos - pass_steps - 4 >= 0:
+            left_arr = a[0 : pos - pass_steps + 1]
+            left_radius = np.mean(left_arr)
+        else:
+            left_radius = a[0]
 
-    if pos + pass_steps + 4 < a.shape[0] and side in [0, 2] :
-        right_arr = a[pos + pass_steps : pos + pass_steps + 5]
-        right_radius = np.mean(right_arr)
+    if side in [0, 2]:
+        if pos + pass_steps + 4 < a.shape[0]:
+            right_arr = a[pos + pass_steps : pos + pass_steps + 5]
+            right_radius = np.mean(right_arr)
+        elif pos + pass_steps < a.shape[0]:
+            right_arr = a[pos + pass_steps : a.shape[0]]
+            right_radius = np.mean(right_arr)
+        else:
+            right_radius = a[a.shape[0]-1]
     
     if left_radius == None and right_radius != None:
         mean_radius = right_radius
@@ -176,8 +188,10 @@ def find_stenosis_ratios(diameter_1, diameter_2, side, length_percentage=0.1):
         avg_distance = max_stable_mask(np.array(avg_distances), i, ratio_threshold, distance, interval_size, dif_thresh, side)                        
         ref_avg_distances.append(avg_distance)
     
-    is_stop = False
-    while not is_stop:
+    is_stop = False 
+    count = 0
+    while not is_stop or count < 1000:
+        count += 1
         is_stop = True
         for idx, ring in enumerate(avg_distances):
             neighbor_avg_distances = []
@@ -204,7 +218,6 @@ def find_stenosis_ratio(start_idx, end_idx, diameter_1, diameter_2, side, length
     smooth_avg = gaussian_filter1d(diameter_2, sigma=2)
 
     ratios = find_stenosis_ratios(smooth_min, smooth_avg, side, length_percentage)
-
     if not is_peak:
         result = np.max(ratios[start_idx:end_idx], axis=0)
     else:

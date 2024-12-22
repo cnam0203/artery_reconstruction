@@ -7,6 +7,8 @@ import nibabel as nib
 import re
 import os
 import json
+import csv
+from skimage import measure
 from visualize_graph import *
 from process_graph import *
 from ref_measurement import *
@@ -87,6 +89,8 @@ mapping_names = {
     6: 'RACA',
     7: 'LMCA',
     8: 'RMCA',
+    11: 'LPCA',
+    12: 'RPCA',
     17: 'LAchA',
     18: 'RAchA',
 }
@@ -98,6 +102,8 @@ mapping_colors = {
     6: 'black',
     7: 'yellow',
     8: 'pink',
+    11: 'purple',
+    12: 'gray',
     17: 'purple',
     18: 'gray',
 }
@@ -106,7 +112,7 @@ options = {
     'stenosis': {
         'dataset_dir': 'E:/stenosis/',
         'pattern': re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz'),
-        'arteries': [1, 2, 3],
+        'arteries': [1, 2, 3, 5, 6, 7, 8, 11, 12],
         'is_replace': True,
         'org_pre_str': 'sub-',
         'org_post_str': '_run-1_mra_eICAB_CW.nii.gz',
@@ -117,7 +123,7 @@ options = {
         'dataset_dir': 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/tof_mra_julia',
         'pattern': re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz'),
         'sub_names': [],
-        'arteries': [1, 2, 3],
+        'arteries': [1],
         'org_pre_str': 'sub-',
         'org_post_str': '_run-1_mra_eICAB_CW.nii.gz',
         'seg_pre_str': 'sub-',
@@ -156,13 +162,20 @@ for key in options:
             index = match.group(1)
             sub_names.append(index)
 
+    # with open(f'C:/Users/nguc4116/Desktop/{key}.csv', 'w', newline='') as file:
+    #     writer = csv.writer(file)
+    #     for line in sub_names:
+    #         writer.writerow([line])
+
     options[key]['sub_names'] = sub_names
 
 app = Dash()
 
 app.layout =  html.Div([
     html.H1(children='Artery stenosis map', style={'textAlign':'center'}),
+    html.Div([dcc.Graph(id='graph-content-2', style={'width': '100%'})], style={'width': '100%'}),
     html.Div([
+        html.Div([dcc.Graph(id='graph-content', style={'width': '100%'})], style={'width': '50%'}),
         html.Div([
             html.Div([
                 html.Label('Choose a dataset:', style={'width': '100px'}),
@@ -192,7 +205,7 @@ app.layout =  html.Div([
                     max=100,
                     step=1,
                     marks={i: str(i) for i in range(0, 101, 10)},  # Optional: Show marks at every 10th step
-                    value=[20, 80],  # Default value
+                    value=[25, 75],  # Default value
                 )], style={"width": "400px"})
             ], style={'display': 'flex', 'alignItems': 'center', 'justifyContent': 'center', 'textAlign': 'center', 'marginBottom': '20px'}),
             html.Div([dash_table.DataTable(id='tbl',
@@ -201,8 +214,7 @@ app.layout =  html.Div([
                 'whiteSpace': 'normal',
                 'height': 'auto',
             },)]),
-        ], style={'width': '40%'}),
-        html.Div([dcc.Graph(id='graph-content', style={'width': '100%'})], style={'width': '60%'})
+        ], style={'width': '40%'})
     ], style={'display': 'flex'}),
     html.Div([
         # html.H2(children='Comparison of measurement', style={'textAlign':'center'}),
@@ -321,15 +333,15 @@ def display_hover_data(clickData_1, clickData_2, clickData_3, clickData_4, click
 
                     if point_index - step_num >= 0:
                         x0 = (point_index - step_num)*0.5
-                        # chosen_points = points[chosen_ring_vertices[point_index- step_num]]
+                        chosen_points = points[chosen_ring_vertices[point_index- step_num]]
                         # show_points.append(chosen_points)
 
                     if point_index + step_num < len(chosen_ring_vertices):
                         x1 = (point_index + step_num)*0.5
-                        # chosen_points = points[chosen_ring_vertices[point_index + step_num]]
+                        chosen_points = points[chosen_ring_vertices[point_index + step_num]]
                         # show_points.append(chosen_points)
 
-                    visualized_rings = generate_points_name(np.concatenate(show_points, axis=0), 3, 'red', 'ring with min diam')
+                    visualized_rings = generate_points_name(np.concatenate(show_points, axis=0), 3, 'red', '')
                     graph_figure['data'][-1] = visualized_rings
 
                     shape_1 = {
@@ -398,23 +410,26 @@ def get_figure(value_0, value, value_2, value_3, chart_type):
 
             if chart_type == 0:
                 results.append({'idx': i, 'line': df['min_distances']})
-                title = 'Min diameter by Length'
+                title = 'Min diameter along the centerline'
                 y_title = 'Diameter (mm)'
             elif chart_type == 1:
                 results.append({'idx': i, 'line': df['avg_radius']})
                 title = 'Avg diameter by Length'
                 y_title = 'Diameter (mm)'
             elif chart_type == 2:
-                stenosis = find_stenosis_ratios(df['min_distances'], df['avg_radius'], side=0, length_percentage=value_3/100)
+                smooth_min = gaussian_filter1d(df['min_distances'], sigma=2)
+                smooth_avg = gaussian_filter1d(df['avg_radius'], sigma=2)
+                stenosis = find_stenosis_ratios(smooth_min, smooth_avg, side=0, length_percentage=value_3/100)
                 results.append({'idx': i, 'line': stenosis})
-                title = 'Stenosis ratio by length (min/disprox)'
+                title = 'Stenosis ratio (min_diameter/disprox_diameter) along the centerline'
                 y_title = 'Percentage (%)'
             elif chart_type == 3:
                 smooth_min = gaussian_filter1d(df['min_distances'], sigma=2)
                 smooth_avg = gaussian_filter1d(df['avg_radius'], sigma=2)
+                stenosis = 1 - smooth_min/np.mean(smooth_avg)
                 stenosis = find_stenosis_ratios(smooth_min, smooth_avg, side=0, length_percentage=value_3/100)
                 results.append({'idx': i, 'line': np.gradient(stenosis)})
-                title = '1st derivative stenosis ratio by length (min/disprox)'
+                title = '1st derivative stenosis ratio by length (min/avg_diameter)'
                 y_title = 'Derivative value'
             elif chart_type == 5:
                 results.append({'idx': i, 'line': np.gradient(df['min_distances'])})
@@ -423,7 +438,7 @@ def get_figure(value_0, value, value_2, value_3, chart_type):
             elif chart_type == 6:
                 smooth_data = gaussian_filter1d(df['min_distances'], sigma=2)
                 results.append({'idx': i, 'line': smooth_data})
-                title = 'Min diameter'
+                title = 'Min diameter along the centerline'
                 y_title = 'Diameter (mm)'
             elif chart_type == 7:
                 smooth_data = gaussian_filter1d(df['avg_radius'], sigma=2)
@@ -436,11 +451,11 @@ def get_figure(value_0, value, value_2, value_3, chart_type):
                 title = '1st derivative of min diameter'
                 y_title = 'Diameter (mm)'
             elif chart_type == 9:
-                smooth_min = gaussian_filter1d(df['min_distances'], sigma=2)
-                smooth_avg = gaussian_filter1d(df['avg_radius'], sigma=2)
-                stenosis = find_stenosis_ratios(smooth_min, smooth_avg, side=0, length_percentage=value_3/100)
+                stenosis = 1-df['min_distances']/np.mean(df['avg_radius'])
+                # stenosis = find_stenosis_ratios(df['min_distances'], df['avg_radius'], side=0, length_percentage=value_3/100)
                 results.append({'idx': i, 'line': stenosis})
-                title = 'Stenosis ratio by length (min/disprox) after smoothing'
+                title = 'Stenosis ratio along the centerline (min_diameter/avg_diameter)'
+                y_title = 'Percentage (%)'
             elif chart_type == 4:
                 if not os.path.isfile(result_dir + f'{str(value)}/smooth_points_{i}.txt'):
                     results.append(None)
@@ -558,12 +573,28 @@ def get_figure(value_0, value, value_2, value_3, chart_type):
 
     return figure
 
-
 def update_table(value_0, value, value_2, value_3):
     if value_0 == 'pascal':
         overestimate = 0
     else:
         overestimate = 5*0.3125
+
+    is_eicab = False
+    if value_0 == 'stenosis':
+        segment_path = f"""E:/stenosis/sub-{str(value)}_run-1_mra_eICAB_CW.nii.gz"""
+        centerline_path = f"""E:/centerline/sub-{str(value)}_run-1_mra_CircleOfWillis_centerline.nii.gz"""
+        diameter_path = f"""E:/diameter/sub-{str(value)}_run-1_mra_CircleOfWillis_diameter.nii.gz"""
+
+        if os.path.exists(segment_path) and os.path.exists(centerline_path) and os.path.exists(diameter_path):
+            print('All three files exist')
+            is_eicab = True
+            segment_image = nib.load(segment_path)
+            centerline_image = nib.load(centerline_path)
+            diameter_image = nib.load(diameter_path)
+
+            segment_data = segment_image.get_fdata()
+            centerline_data = centerline_image.get_fdata()
+            diameter_data = diameter_image.get_fdata()
 
     results = []
     neurologist_df['ID'] = neurologist_df['ID'].astype(str)
@@ -575,6 +606,12 @@ def update_table(value_0, value, value_2, value_3):
         neuro_row = pd.Series({col: 0 for col in neurologist_df.columns})
 
     for i in options[value_0]['arteries']:
+        avg_diameter_eicab = None
+        if is_eicab:
+            indices = np.where((segment_data == i) & (centerline_data == 1))
+            selected_diameter_values = diameter_data[indices]
+            avg_diameter_eicab = round(np.mean(selected_diameter_values, axis=0), 2)
+    
         info_dir = result_dir + f"""{str(value)}/measure_output_{str(i)}.csv"""
         if os.path.isfile(info_dir):
             diam_col_name = mapping_names[i] + '_diam'
@@ -597,9 +634,12 @@ def update_table(value_0, value, value_2, value_3):
             if value_0 != 'pascal':
                 metrics[f'Neuro_SL'] = sten
                 metrics[f'Neuro_diam'] = diam
+                metrics[f'eicab_diam'] = avg_diameter_eicab
 
-            metrics[f'Min_diam'] = round(df['min_distances'][start_idx:end_idx].min()-overestimate, 2)
-            metrics[f'Avg_diam'] = round(df['avg_radius'][start_idx:end_idx].mean()-overestimate, 2)
+            metrics[f'Min_diam'] = round(df['min_distances'][start_idx:end_idx].min(), 2)
+            metrics[f'Avg_diam'] = round(df['avg_radius'][start_idx:end_idx].mean(), 2)
+            # metrics[f'Min_diam_5vx'] = round(df['min_distances'][start_idx:end_idx].min()-overestimate, 2)
+            # metrics[f'Avg_diam_5vx'] = round(df['avg_radius'][start_idx:end_idx].mean()-overestimate, 2)
 
             if value_0 != 'pascal':
                 metrics[f'Neuro_SL'] = sten
@@ -613,7 +653,7 @@ def update_table(value_0, value, value_2, value_3):
                     is_peaks = [True, False]
 
                 for is_peak in is_peaks:
-                    is_check = '' if is_peak else 'non-checked'
+                    is_check = 'consider-peak' if is_peak else 'non-consider'
                     if key == 1: #local_min/avg_global_avg
                         metrics[f'SR-{method_name}'] = round((1-df['min_distances'][start_idx:end_idx]/avg_avg_diameter).max(), 2)
                     elif key == 2: #local_min/avg_global_min
@@ -776,8 +816,8 @@ def update_graph(value_0, value, value_2):
     )
 
 
-    visualized_start_points = generate_points_name(np.array(start_points), 10, 'blue', 'start point')
-    visualized_end_points = generate_points_name(np.array(end_points), 10, 'red', 'end point')
+    visualized_start_points = generate_points_name(np.array(start_points), 10, 'red', 'end point')
+    visualized_end_points = generate_points_name(np.array(end_points), 10, 'blue', 'start point')
     visualized_middle_points = generate_points_name(np.array(middle_points), 10, 'orange', 'middle point')
     visualized_cons_points = generate_points_name(np.array(cons_points), 10, 'green', '25th/75th point')
     # visualized_segment_points = generate_points_name(np.array(middle_points_all), 5, 'blue', 'segment point')
@@ -790,11 +830,79 @@ def update_graph(value_0, value, value_2):
     # show_points.append(visualized_segment_points)
 
     fig = go.Figure(data=show_points+meshes+line_traces+[go.Scatter3d()], layout=layout)
-    fig.update_layout(height=500,paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=0, b=0) )
+    fig.update_layout(height=500,paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=0, b=0),
+    legend=dict(
+        x=0,       # position on the x-axis (0 is left)
+        y=1,       # position on the y-axis (1 is top)
+        xanchor='left',  # anchor the legend at the left
+        yanchor='top'    # anchor the legend at the top
+    ) )
+    return fig
+
+def update_graph_2(value_0, value, value_2):
+    dataset_name = value_0
+    sub_num = value
+
+    segment_file_path = options[dataset_name]['dataset_dir'] + f"""/{options[dataset_name]['org_pre_str']}{str(sub_num)}{options[dataset_name]['org_post_str']}"""
+    original_file_path = options[dataset_name]['dataset_dir'] + f"""/{options[dataset_name]['seg_pre_str']}{str(sub_num)}{options[dataset_name]['seg_post_str']}"""
+
+    segment_image = nib.load(segment_file_path)
+    original_image = nib.load(original_file_path)
+
+    original_data = original_image.get_fdata()
+    segment_data = segment_image.get_fdata()
+    voxel_sizes = segment_image.header.get_zooms()
+    info = {}
+    info_dir = result_dir + str(sub_num) + '/'
+    showed_data = []
+
+    vmtk_boundary_vertices_all = []
+    vmtk_boundary_faces_all = []
+    vert_num = 0
+    line_traces = []
+    meshes = []
+    min_diam_rings = []
+    middle_points_all = []
+
+    start_points = []
+    end_points = []
+    middle_points = []
+    cons_points = []
+
+    for artery_index in options[value_0]['arteries']:
+        mask_data = np.copy(segment_data)
+        mask = np.isin(mask_data, artery_index, invert=True)
+        mask_data[mask] = 0
+        mask_data[mask_data != 0] = 1
+
+        vertices, faces, normals, values = measure.marching_cubes(mask_data, level=0.5, spacing=voxel_sizes)
+
+        mesh = generate_mesh(vertices, faces, mapping_names[artery_index], mapping_colors[artery_index])
+        meshes.append(mesh)
+
+
+    layout = go.Layout(
+        scene=dict(
+            aspectmode='manual',
+            xaxis = dict(visible=False),
+            yaxis = dict(visible=False),
+            zaxis =dict(visible=False)
+        ),
+    )
+
+    fig = go.Figure(data=meshes, layout=layout)
+    fig.update_layout(height=500,paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=0, b=0),
+    legend=dict(
+        x=0,       # position on the x-axis (0 is left)
+        y=1,       # position on the y-axis (1 is top)
+        xanchor='left',  # anchor the legend at the left
+        yanchor='top'    # anchor the legend at the top
+    ) )
     return fig
 
 @callback(
     [
+        Output('graph-content-2', 'figure'),
         Output('graph-content', 'figure'),
         Output('tbl', 'data' ),
         Output('multiline-graph-1', 'figure' ),
@@ -816,6 +924,7 @@ def update_graph(value_0, value, value_2):
     ]
 )
 def update_data(value_0, value_1, value_2, value_3):
+    output_0 = update_graph_2(value_0, value_1, value_2)
     output_1 = update_graph(value_0, value_1, value_2)
     output_2 = update_table(value_0, value_1, value_2, value_3)
     output_3 = get_figure(value_0, value_1, value_2, value_3, 0)
@@ -829,7 +938,7 @@ def update_data(value_0, value_1, value_2, value_3):
     output_11 = get_figure(value_0, value_1, value_2, value_3, 8)
     output_12 = get_figure(value_0, value_1, value_2, value_3, 9)
 
-    return output_1, output_2, output_3, output_4, output_7, output_5, output_6, output_8, output_9, output_10, output_11, output_12
+    return output_0, output_1, output_2, output_3, output_4, output_7, output_5, output_6, output_8, output_9, output_10, output_11, output_12
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8050)

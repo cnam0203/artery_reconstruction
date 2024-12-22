@@ -13,6 +13,7 @@ from sklearn.cluster import DBSCAN
 from preprocess_data import *
 from process_graph import *
 from visualize_graph import *
+from scipy.ndimage import distance_transform_edt
 
 # Nearest neighbor algorithm
 def nearest_neighbor(points):
@@ -110,7 +111,7 @@ def smooth_path(path, window_size):
         smoothed_path.append((avg_x, avg_y))
     return smoothed_path
 
-def find_touchpoints(mask_data, center_points, distance_threshold=20):
+def find_touchpoints(mask_data, center_points, distance_threshold=20, segment_image=None):
     new_points = 1000000
     loop = 0
     zero_positions = np.argwhere(mask_data != 0)
@@ -119,6 +120,7 @@ def find_touchpoints(mask_data, center_points, distance_threshold=20):
     for index, pos in enumerate(center_points):
         artery_data[pos[0]][pos[1]][pos[2]] = index
 
+    
     while new_points != 0:
         loop += 1
         new_points = 0
@@ -152,6 +154,10 @@ def find_touchpoints(mask_data, center_points, distance_threshold=20):
 
     for pos in touch_points:
         artery_data[pos[0]][pos[1]][pos[2]] = -1 
+        mask_data[pos[0]][pos[1]][pos[2]] = 3
+    
+    img = nib.Nifti1Image(mask_data, segment_image.affine)
+    nib.save(img, f'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/touchpoint.nii.gz')
 
     touch_points = np.argwhere(artery_data == -1)
     artery_points = np.argwhere(artery_data != 0)
@@ -222,21 +228,28 @@ def find_skeleton_ica(segment_image, original_image=None, index=None, intensity_
 
     mask_data, cex_data, surf_data = preprocess_data(original_data, segment_data, index, intensity_threshold_1, intensity_threshold_2, gaussian_sigma, neighbor_threshold_1, neighbor_threshold_2 )
     
+    # img = nib.Nifti1Image(mask_data, segment_image.affine)
+    # nib.save(img, 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/extract_art_1.nii.gz')
+
     # Find the voxel-based skeleton
     artery_points = np.argwhere(cex_data != 0)
 
-    img = nib.Nifti1Image(cex_data, segment_image.affine)
-    nib.save(img, 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/extract_art.nii.gz')
+    # img = nib.Nifti1Image(cex_data, segment_image.affine)
+    # nib.save(img, 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/extract_art.nii.gz')
+
+    thinning_mask = np.copy(cex_data)
+
+    # for i in range(0, 15, 2):
+    #     distance_tranform = distance_transform_edt(thinning_mask)
+    #     thinning_mask[distance_tranform==1] = 0
+    #     img = nib.Nifti1Image(thinning_mask, segment_image.affine)
+    #     nib.save(img, f'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/thinning_{str(i)}.nii.gz')
 
     skeleton = skeletonize(cex_data)
+
     skeleton_points, end_points, junction_points, connected_lines = find_graphs(skeleton)
 
     visualized_thin_points = generate_points(skeleton_points, 2, 'green')
-
-    # show_figure([
-    #             visualized_thin_points,
-    #         ] 
-    # )
 
     neighbor_distances = {}
 
@@ -252,131 +265,6 @@ def find_skeleton_ica(segment_image, original_image=None, index=None, intensity_
             neighbor_distances[line[i]][line[i+1]] = distance
             neighbor_distances[line[i+1]][line[i]] = distance
 
-    # # Create traces
-    # # Visualize artery points 
-    # point_trace_0 = go.Scatter3d(
-    #     x=artery_points[:, 0],
-    #     y=artery_points[:, 1],
-    #     z=artery_points[:, 2],
-    #     mode='markers',
-    #     marker=dict(
-    #         size=5,
-    #         color='green',
-    #     ),
-    #     name='Points'
-    # )
-
-    # # Visualize skeleton points 
-    # point_trace_1 = go.Scatter3d(
-    #     x=skeleton_points[:, 0],
-    #     y=skeleton_points[:, 1],
-    #     z=skeleton_points[:, 2],
-    #     mode='markers',
-    #     marker=dict(
-    #         size=5,
-    #         color='green',
-    #     ),
-    #     name='Points'
-    # )
-    
-    # # Visualize junction points
-    # point_trace_2 = go.Scatter3d(
-    #     x=skeleton_points[junction_points, 0],
-    #     y=skeleton_points[junction_points, 1],
-    #     z=skeleton_points[junction_points, 2],
-    #     mode='markers',
-    #     marker=dict(
-    #         size=5,
-    #         color='black',
-    #     ),
-    #     name='Points'
-    # )
-    
-    # # Visualize end points
-    # point_trace_3 = go.Scatter3d(
-    #     x=skeleton_points[end_points, 0],
-    #     y=skeleton_points[end_points, 1],
-    #     z=skeleton_points[end_points, 2],
-    #     mode='markers',
-    #     marker=dict(
-    #         size=5,
-    #         color='red',
-    #     ),
-    #     name='Points'
-    # )
-
-    # # vector_trace = go.Cone(
-    # #     x=points[:, 0],
-    # #     y=points[:, 1],
-    # #     z=points[:, 2],
-    # #     u=normals[:, 0],
-    # #     v=normals[:, 1],
-    # #     w=normals[:, 2],
-    # #     sizeref=1,
-    # #     name='Vectors'
-    # # )
-
-    # # Create layout
-    # layout = go.Layout(
-    #     scene=dict(
-    #         aspectmode='cube',
-    #         camera=dict(
-    #             eye=dict(x=1, y=1, z=1)
-    #         )
-    #     ),
-    #     height=800,  # Set height to 800 pixels
-    #     width=1200   # Set width to 1200 pixels
-    # )
-
-
-
-    # fig_1 = go.Figure(data=[point_trace_0], layout=layout)
-    # fig_1.show()
-
-    # fig_2 = go.Figure(data=[point_trace_1, point_trace_2, point_trace_3], layout=layout)
-    # fig_2.show()
-
-    # # Calculate marching cubes using scikit-image
-    # verts, faces, normals, _ = measure.marching_cubes(cex_data, level=0.5, spacing=voxel_sizes)
-
-
-    # # Convert marching cubes result to Open3D mesh
-    # mesh_o3d = o3d.geometry.TriangleMesh()
-    # mesh_o3d.vertices = o3d.utility.Vector3dVector(verts)
-    # mesh_o3d.triangles = o3d.utility.Vector3iVector(faces)
-    # mesh_o3d.triangles = o3d.utility.Vector3iVector(np.asarray(mesh_o3d.triangles)[:, ::-1])
-    # mesh_o3d = mesh_o3d.filter_smooth_laplacian(1, 0.5)
-    # mesh_o3d.compute_vertex_normals()
-    
-    # points = np.asarray(mesh_o3d.vertices)
-    # normals = np.asarray(mesh_o3d.vertex_normals)
-
-
-    # point_cloud = o3d.geometry.PointCloud()
-    # point_cloud.points = o3d.utility.Vector3dVector(points) 
-
-    # # Create a LineSet object
-    # line_set = o3d.geometry.LineSet()
-    # line_set.points = o3d.utility.Vector3dVector(skeleton_points)
-    # lines = []
-    # colors = []
-
-    # for i in range(skeleton_points.shape[0]):
-    #     for j in range(skeleton_points.shape[0]):
-    #         if neighbor_distances[i][j] > neighbor_distances[j][i]:
-    #             neighbor_distances[i][j] = neighbor_distances[j][i]
-    #         elif neighbor_distances[i][j] < neighbor_distances[j][i]:
-    #             neighbor_distances[j][i] = neighbor_distances[i][j]
-
-    # for i in range(skeleton_points.shape[0]):
-    #     for j in range(skeleton_points.shape[0]):
-    #         if i != j and neighbor_distances[i][j] > 0:
-    #             lines.append([i, j])
-    #             colors.append([0, 0, 0])
-
-    # line_set.lines = o3d.utility.Vector2iVector(lines)
-    # line_set.colors = o3d.utility.Vector3dVector(np.array(colors))
-
     # Find longest path
     longest_path = []
     max_points = 0
@@ -389,17 +277,24 @@ def find_skeleton_ica(segment_image, original_image=None, index=None, intensity_
 
     center_points = skeleton_points[longest_path].astype(int)
     inter_points = interpolate_path(center_points)
-    touch_points = find_touchpoints(surf_data, inter_points, 30)
+    touch_points = find_touchpoints(surf_data, inter_points, 30, segment_image)
+
+    # thinning_mask = np.zeros_like(cex_data)
+    # for point in center_points:
+    #     x, y, z = point
+    #     thinning_mask[x, y, z] = 1
+    # img = nib.Nifti1Image(thinning_mask, segment_image.affine)
+    # nib.save(img, 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/final_skeleton.nii.gz')
 
     for point in touch_points:
         surf_data[point[0]][point[1]][point[2]] = 0
 
     # visualized_thin_points = generate_points(center_points, 2, 'green')
 
-    # show_figure([
-    #             visualized_thin_points,
-    #         ] 
-    # )
+    show_figure([
+                visualized_thin_points,
+            ] 
+    )
 
     return surf_data
     # # Prepare lines for centerline from our algorithm

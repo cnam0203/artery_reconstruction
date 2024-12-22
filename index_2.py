@@ -11,6 +11,22 @@ from process_graph import *
 from ref_measurement import *
 import itertools
 
+# Define a custom color palette without red and blue
+custom_colors = [
+                # '#F6D55C',  # Yellow
+                 '#3CAEA3',  # Green
+                 '#20639B',  # Blue
+                 '#173F5F',  # Dark Blue
+                 '#937AFF',  # Light Purple
+                 
+                 # Additional colors
+                #  '#FF6F61',  # Coral
+                 '#6B5B95',  # Indigo
+                 '#FFB6C1',  # Light Pink
+                 '#F7CAC9',  # Blush Pink
+                 '#92A8D1'
+                 ]  # Soft Blue
+                 
 options = [
     {
         'dataset_dir': 'C:/Users/nguc4116/Desktop/artery_reconstruction/dataset/tof_mra_julia/',
@@ -33,7 +49,7 @@ options = [
     }, {
         'dataset_dir': 'E:/stenosis/',
         'pattern': re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz'),
-        'arteries': [1, 2, 3],
+        'arteries': [1, 2, 5, 6, 7, 8, 11, 12],
         'is_replace': True,
         'org_pre_str': 'sub-',
         'org_post_str': '_run-1_mra_eICAB_CW.nii.gz',
@@ -59,6 +75,8 @@ neurologist_df = pd.read_csv('C:/Users/nguc4116/Desktop/artery_reconstruction/st
 neurologist_df['ID'] = neurologist_df['ID'].astype(str)
 checked_df = pd.read_csv('C:/Users/nguc4116/Desktop/checked_stenosis.csv', sep=',')
 checked_df['ID'] = checked_df['ID'].astype(str)
+eicab_df = pd.read_csv(f"""E:/stenosis/eicab_measure.csv""", sep=',')
+eicab_df['sub_num'] = eicab_df['sub_num'].astype(str)
 
 mapping_names = {
     1: 'LICA',
@@ -68,6 +86,8 @@ mapping_names = {
     6: 'RACA',
     7: 'LMCA',
     8: 'RMCA',
+    11: 'LPCA',
+    12: 'RPCA',
     17: 'LAchA',
     18: 'RAchA',
 }
@@ -79,20 +99,14 @@ mapping_colors = {
     6: 'black',
     7: 'yellow',
     8: 'pink',
+    11: 'purple',
+    12: 'gray',
     17: 'purple',
     18: 'gray',
 }
 
 stenosis_methods = {
-    # 6: '1. local_avg/disprox_avg',
-    # 11: '2. local_avg/distal_avg',
-    # 12: '3. local_avg/proximal_avg',
-    # 5: '4. local_avg/global_avg',
-    1: 'A. local_min/global_avg',
-    # 2: '6. local_min/global_min',
-    # 3: '7. local_min/disprox_min',
-    # 7: '8. local_min/distal_min',
-    # 8: '9. local_min/proximal_min',
+    1: 'A. local_min/entire_avg',
     4: 'B. local_min/disprox_avg',
     9: 'C. local_min/distal_avg',
     10: 'D. local_min/proximal_avg',
@@ -103,28 +117,29 @@ metrics = {
     '-2': 'non-stenosis',
     '-1': 'stenosis and non-stenosis',
     '0': 'stenosis level-0',
-    '1': 'stenosis level-1',
-    '2': 'stenosis level-2',
-    '3': 'stenosis level-3',
-    '4': 'stenosis level-4'
+    '1': 'mild stenosis',
+    '2': 'moderate stenosis',
+    '3': 'severe stenosis',
+    '4': 'occlusion'
 }
 
 is_peak = True
 # Iterate over the files in the directory
-for filename in os.listdir(dataset_dir):
-    match = pattern.match(filename)
-    if match:
-        index = match.group(1)
-
-        if option_idx == 2:
-            checked_rows = checked_df[checked_df['ID'] == str(index)]
+# for filename in os.listdir(dataset_dir):
+#     match = pattern.match(filename)
+#     if match:
+#         index = match.group(1)
+#         if option_idx == 2:
+#             checked_rows = checked_df[checked_df['ID'] == str(index)]
         
-            if len(checked_rows) > 0:
-                checked_row = checked_rows.iloc[0]
-                if checked_row['valid'] in [1, 4, '1', '4']:
-                    sub_nums.append(index)
-                else:
-                    continue
+#             if len(checked_rows) > 0:
+#                 checked_row = checked_rows.iloc[0]
+#                 if checked_row['valid'] in [1, 4, '1', '4']:
+#                     sub_nums.append(index)
+#                 else:
+#                     continue
+
+sub_nums = [name for name in os.listdir(result_dir) if os.path.isdir(os.path.join(result_dir, name))]
 
 combined_info = {}
 metrics_values = [metrics[key] for key in metrics] 
@@ -143,20 +158,31 @@ for sub_num in sub_nums:
     else:
         neuro_row = pd.Series({col: 0 for col in neurologist_df.columns})
 
+    eicab_rows = eicab_df[eicab_df['sub_num'] == str(sub_num)]
+    
+    if len(eicab_rows) > 0:
+        eicab_row = eicab_rows.iloc[0]
+    else:
+        eicab_row = pd.Series({col: None for col in eicab_df.columns})
+
     for art_idx in chosen_arteries:
         diam_col_name = mapping_names[art_idx] + '_diam'
         sten_col_name = mapping_names[art_idx] + '_stenosis'
 
         neuro_diam = float(neuro_row.get(diam_col_name.lower(), 0))
         neuro_sten = int(neuro_row.get(sten_col_name.lower(), 0))
+        eicab_diam = 0
+        eicab_diam = eicab_row[art_idx]
 
         combined_info[sub_num][art_idx] = {
             'neuro_diam': neuro_diam,
+            'eicab_diam': eicab_diam,
             'neuro_sten': neuro_sten,
             'min_diam': 0,
             'avg_diam': 0,
             'sten_results': {}
         }
+
 
 app = Dash()
 
@@ -192,7 +218,8 @@ def update_charts(len_percents):
             'min_diam': [],
             'avg_diam': [],
             'min_diam_5vx': [],
-            'avg_diam_5vx': []
+            'avg_diam_5vx': [],
+            'avg_diam_eicab': []
         }
 
     for sub_num in sub_nums:
@@ -213,6 +240,9 @@ def update_charts(len_percents):
                 error_df[mapping_names[art_idx]]['avg_diam'].append(combined_info[sub_num][art_idx]['neuro_diam'] - round(df['avg_radius'][start_idx:end_idx].mean(), 2))
                 error_df[mapping_names[art_idx]]['min_diam_5vx'].append(combined_info[sub_num][art_idx]['neuro_diam'] - round(df['min_distances'][start_idx:end_idx].min() - 5*0.375))
                 error_df[mapping_names[art_idx]]['avg_diam_5vx'].append(combined_info[sub_num][art_idx]['neuro_diam'] - round(df['avg_radius'][start_idx:end_idx].mean() - 5*0.375, 2))
+
+                if combined_info[sub_num][art_idx]['eicab_diam']:
+                    error_df[mapping_names[art_idx]]['avg_diam_eicab'].append(combined_info[sub_num][art_idx]['neuro_diam'] - combined_info[sub_num][art_idx]['eicab_diam'])
 
                 results = {}
                 for key in stenosis_methods:
@@ -265,7 +295,8 @@ def update_charts(len_percents):
                     results[key] = result
 
                 combined_info[sub_num][art_idx]['sten_results'] = results
-
+    
+    combined_df.to_csv('combined_data.csv', index=False)
     figures = []
 
     # Extract keys and values from the data structure
@@ -274,6 +305,7 @@ def update_charts(len_percents):
     avg_distances_values = [error_df[artery]['avg_diam'] for artery in artery_names]
     min_distances_5vx_values = [error_df[artery]['min_diam_5vx'] for artery in artery_names]
     avg_distances_5vx_values = [error_df[artery]['avg_diam_5vx'] for artery in artery_names]
+    avg_distances_eicab_values = [error_df[artery]['avg_diam_eicab'] for artery in artery_names]
     artery_names_qty = [f"{artery}_({str(len(error_df[artery]['min_diam']))})" for artery in artery_names]
 
 
@@ -289,16 +321,20 @@ def update_charts(len_percents):
     avg_5vx_distances = []
     arteries_min_5vx = []
     arteries_avg_5vx = []
+    avg_eicab_distances = []
+    arteries_avg_eicab = []
 
     for artery in artery_names:
         min_distances.extend(error_df[artery]['min_diam'])
         avg_distances.extend(error_df[artery]['avg_diam'])
         min_5vx_distances.extend(error_df[artery]['min_diam_5vx'])
         avg_5vx_distances.extend(error_df[artery]['avg_diam_5vx'])
+        avg_eicab_distances.extend(error_df[artery]['avg_diam_eicab'])
         arteries_min.extend([f"{artery}_({len(error_df[artery]['min_diam'])})"] * len(error_df[artery]['min_diam']))
         arteries_avg.extend([f"{artery}_({len(error_df[artery]['avg_diam'])})"] * len(error_df[artery]['avg_diam']))
         arteries_min_5vx.extend([f"{artery}_({len(error_df[artery]['min_diam_5vx'])})"] * len(error_df[artery]['min_diam_5vx']))
         arteries_avg_5vx.extend([f"{artery}_({len(error_df[artery]['avg_diam_5vx'])})"] * len(error_df[artery]['avg_diam_5vx']))
+        arteries_avg_eicab.extend([f"{artery}_({len(error_df[artery]['avg_diam_5vx'])})"] * len(error_df[artery]['avg_diam_5vx']))
 
     # Create the figure
     fig = go.Figure()
@@ -309,7 +345,8 @@ def update_charts(len_percents):
         y=min_distances,
         name='min_distances',
         box_visible=True,
-        meanline_visible=True
+        meanline_visible=True,
+        marker=dict(color=custom_colors[0])
     ))
 
     fig.add_trace(go.Violin(
@@ -317,7 +354,8 @@ def update_charts(len_percents):
         y=avg_distances,
         name='avg_distances',
         box_visible=True,
-        meanline_visible=True
+        meanline_visible=True,
+        marker=dict(color=custom_colors[1])
     ))
 
     # Add traces for min_distances and avg_distances
@@ -326,7 +364,8 @@ def update_charts(len_percents):
         y=min_5vx_distances,
         name='min_distances_5vx',
         box_visible=True,
-        meanline_visible=True
+        meanline_visible=True,
+        marker=dict(color=custom_colors[2])
     ))
 
     fig.add_trace(go.Violin(
@@ -334,10 +373,20 @@ def update_charts(len_percents):
         y=avg_5vx_distances,
         name='avg_distances_5vx',
         box_visible=True,
-        meanline_visible=True
+        meanline_visible=True,
+        marker=dict(color=custom_colors[3])
+    ))
+
+    fig.add_trace(go.Violin(
+        x=arteries_avg_eicab,
+        y=avg_eicab_distances,
+        name='avg_distances_eicab',
+        box_visible=True,
+        meanline_visible=True,
+        marker=dict(color=custom_colors[4])
     ))
     
-
+    
     # Update layout
     fig.update_layout(
         title_x=0.5,
@@ -367,7 +416,8 @@ def update_charts(len_percents):
             y='Accuracy',
             text='Accuracy',
             title=f'Accuracy of {metric} prediction by methods ({total_samples} samples)',
-            labels={'Method': 'Methods', 'Accuracy': 'Accuracy (%)'}
+            labels={'Method': 'Methods', 'Accuracy': 'Accuracy (%)'},
+            color_discrete_sequence=custom_colors
         )
         fig.update_layout(title_x=0.5)
         fig.update_yaxes(range=[0, 100])
@@ -376,7 +426,7 @@ def update_charts(len_percents):
 
         # Prepare data for Plotly
         fig = go.Figure()
-        for method_data in metric_accuracy:
+        for idx, method_data in enumerate(metric_accuracy):
             method = method_data['Method']
             wrong_points = method_data['Wrong_Points']
             
@@ -387,6 +437,7 @@ def update_charts(len_percents):
                 box_visible=True,  # Show box plot inside the violin
                 meanline_visible=True,
                 showlegend=False,
+                marker=dict(color=custom_colors[idx])
             ))
 
         if metric == 'stenosis':
@@ -398,16 +449,16 @@ def update_charts(len_percents):
         elif metric == 'stenosis level-0':
             y0 = 0
             y1 = 20
-        elif metric == 'stenosis level-1':
+        elif metric == 'mild stenosis':
             y0 = 20
             y1 = 50
-        elif metric == 'stenosis level-2':
+        elif metric == 'moderate stenosis':
             y0 = 50
             y1 = 70
-        elif metric == 'stenosis level-3':
+        elif metric == 'severe stenosis':
             y0 = 70
             y1 = 99
-        elif metric == 'stenosis level-4':
+        elif metric == 'occlusion':
             y0 = 99
             y1 = 100
         else:
@@ -433,7 +484,59 @@ def update_charts(len_percents):
         )
         figures.append(dcc.Graph(figure=fig, style={'width': '50%'}))
 
+        if metric == 'mild stenosis':
+            metric_accuracy = []
+            total_samples = 0
+            for artery in group['Artery'].unique():
+                df_method = group[(group['Methods'] == 'A. local_min/entire_avg') & (group['Artery'] == artery)]
+                print(df_method)
+                concatenated_wrong_points = sum(df_method['Wrong_Points'], [])
+                accuracy = 100 * df_method['True_Prediction'].sum() / df_method['Total_Samples'].sum()
+                total_samples = df_method['Total_Samples'].sum()
+                metric_accuracy.append({'Artery': artery, 'Accuracy': round(accuracy, 2), 'Wrong_Points': concatenated_wrong_points})
 
+            # Prepare data for Plotly
+            fig = go.Figure()
+            for idx, method_data in enumerate(metric_accuracy):
+                method = method_data['Artery']
+                wrong_points = method_data['Wrong_Points']
+                
+                fig.add_trace(go.Violin(
+                    x=[method] * len(wrong_points),
+                    y=wrong_points,
+                    name=method,
+                    box_visible=True,  # Show box plot inside the violin
+                    meanline_visible=True,
+                    showlegend=False,
+                    marker=dict(color=custom_colors[idx])
+                ))
+
+            y0 = 20
+            y1 = 50
+            
+            fig.add_shape(type="rect",
+                    x0=-0.5, y0=y0, x1=len(group['Artery'].unique())-0.5, y1=y1,
+                    line=dict(color="RoyalBlue", width=0),
+                    fillcolor="LightSkyBlue", opacity=0.3)
+            
+            # Update layout for grouped bar chart
+            fig.update_layout(
+                barmode='group',
+                xaxis_title='Artery',
+                yaxis_title='Stenosis percentage (%)',
+                yaxis=dict(range=[-10, 140]), 
+                title=dict(
+                    text=f'Distribution of incorrect prediction ({metric}) by arteries',
+                    x=0.5,  # Centers the title
+                    xanchor='center'
+                ),
+                paper_bgcolor='rgba(0,0,0,0)',  # Figure background
+                plot_bgcolor='rgba(0,0,0,0)'    # Plot area background
+            )
+
+            fig.update_scenes(xaxis_visible=False, yaxis_visible=False,zaxis_visible=False )
+
+            figures.append(dcc.Graph(figure=fig, style={'width': '50%'}))
 
     # Group by Metrics, Methods, and Arteries to calculate accuracy
     figures_data = []
@@ -457,10 +560,16 @@ def update_charts(len_percents):
             color='artery_num',
             barmode='group',
             text='accuracy',
-            title=f'Accuracy of {metric} prediction by Methods and Arteries',
-            labels={'method': 'Methods', 'accuracy': 'Accuracy (%)'}
+            title=f'Accuracy of {metric} prediction by Methods',
+            labels={'method': 'Methods', 'accuracy': 'Accuracy (%)'},
+            color_discrete_sequence=custom_colors
         )
-        fig.update_layout(title_x=0.5)
+        fig.update_layout(title_x=0.5,
+                paper_bgcolor='rgba(0,0,0,0)',  # Figure background
+                plot_bgcolor='rgba(0,0,0,0)'    # Plot area background
+            )
+
+        fig.update_scenes(xaxis_visible=False, yaxis_visible=False,zaxis_visible=False )
         fig.update_yaxes(range=[0, 100])
         figures.append(dcc.Graph(figure=fig, style={'width': '50%'}))
 
@@ -473,8 +582,9 @@ def update_charts(len_percents):
             color='method',
             barmode='group',
             text='accuracy',
-            title=f'Accuracy of {metric} prediction by Methods and Arteries',
-            labels={'artery_num': 'Arteries', 'accuracy': 'Accuracy (%)'}
+            title=f'Accuracy of {metric} prediction by Arteries',
+            labels={'artery_num': 'Arteries', 'accuracy': 'Accuracy (%)'},
+            color_discrete_sequence=custom_colors
         )
     
         fig.update_layout(title_x=0.5)

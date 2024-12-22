@@ -8,10 +8,14 @@ from skimage.draw import line_nd
 import skan
 from scipy.spatial import KDTree, distance_matrix
 
+
 def find_graphs(skeleton):
     # skeleton_points = np.argwhere(skeleton != 0)
-    skeleton_skan = skan.Skeleton(skeleton)
-    skeleton_points = skeleton_skan.coordinates
+    try:
+        skeleton_skan = skan.Skeleton(skeleton)
+        skeleton_points = skeleton_skan.coordinates
+    except:
+        return [], [], [], []
 
     connected_lines = []
     for i in range(skeleton_skan.n_paths):
@@ -49,7 +53,6 @@ def find_graphs(skeleton):
             junction_points.append(key)
     
     return skeleton_points.astype(int), end_points, junction_points, connected_lines
-
 
 def euclidean_distance(point1, point2):
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(point1, point2)))
@@ -1308,7 +1311,6 @@ def connect_split_points(split_groups, skeleton_points, undefined_paths, connect
     # print(undefined_paths, connected_lines)
     return split_paths, undefined_paths, connected_lines
 
-
 def find_adjacent_paths(common_point, left_paths, right_paths, connected_lines):
     left_path_idx, right_path_idx, left_connected_line_idx, right_connected_line_idx = None, None, None, None
     
@@ -1348,7 +1350,6 @@ def find_shortest_distance(start_point, list_points):
             min_index = i
             
     return min_distance, min_index
-
 
 def connect_common_paths(common_paths, left_paths, right_paths, connected_lines, split_paths, skeleton_points, undefined_paths):
     defined_paths = [False] * len(common_paths)

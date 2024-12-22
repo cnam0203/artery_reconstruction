@@ -96,7 +96,7 @@ def generate_points_name(points, point_size=2, point_color='black', name=''):
         text=[f'Pos {i}' for i in range(points.shape[0])]
     )
 
-def generate_mesh(vertices, faces, title, color):
+def generate_mesh(vertices, faces, title='', color='blue'):
     mesh = go.Mesh3d(
         x=vertices[:, 0],
         y=vertices[:, 1],
@@ -104,7 +104,7 @@ def generate_mesh(vertices, faces, title, color):
         i=faces[:, 0],
         j=faces[:, 1],
         k=faces[:, 2],
-        opacity=0.3,
+        opacity=0.5,
         color=color,
         name=title,
         showlegend=True
@@ -124,7 +124,7 @@ def generate_mesh_color(vertices, faces, colors, title=''):
         intensity=colors,
         colorscale='Viridis',
         hoverinfo='text',
-        opacity=0.3,
+        opacity=1,
         hovertext=hover_text,
         name='Stenosis ratio',
         colorbar=dict(title='Stenosis Ratio')
@@ -221,8 +221,7 @@ def generate_lines(lines, line_width=2, line_color='black'):
         z=lines[:, 2],
         mode='lines',
         line=dict(
-            width=line_width,
+            width=5,
             color=line_color
         ),
-        showlegend=False
     )

@@ -6,6 +6,7 @@ from scipy.signal import argrelextrema
 from sklearn.decomposition import PCA
 from scipy.spatial import ConvexHull, Delaunay
 import pandas as pd
+from scipy.ndimage import gaussian_filter1d
 
 import alphashape
 import matplotlib.pyplot as plt
@@ -415,6 +416,23 @@ def find_interior_hull(points_2d):
     # plt.fill(points_2d[hull.vertices, 0], points_2d[hull.vertices, 1], 'b', alpha=0.2)
     # plt.show()
 
+def smooth_line(points, sigma=1.0):
+    """
+    Smoothes a line of 3D points using a Gaussian filter.
+    
+    Parameters:
+    - points (np.ndarray): N*3 array containing 3D coordinates.
+    - sigma (float): The standard deviation of the Gaussian kernel (controls smoothness).
+    
+    Returns:
+    - np.ndarray: Smoothed 3D points.
+    """
+    # Apply Gaussian filter along each axis (x, y, z) independently
+    smoothed_points = np.zeros_like(points)
+    for i in range(3):
+        smoothed_points[:, i] = gaussian_filter1d(points[:, i], sigma=sigma)
+    return smoothed_points
+
 def find_longest_branch(splitted_branches):
     # Use Counter to count the occurrences of each number
     counter = Counter(splitted_branches)
@@ -525,6 +543,10 @@ mapping_names = {
     6: 'RACA',
     7: 'LMCA',
     8: 'RMCA',
+    11: 'LPCA',
+    12: 'RPCA',
+    13: 'LPCA2',
+    14: 'RPCA2',
     17: 'LAchA',
     18: 'RAchA',
 }
@@ -551,7 +573,7 @@ options = [
     }, {
         'dataset_dir': 'E:/stenosis/',
         'pattern': re.compile(r'sub-(\d+)_run-1_mra_eICAB_CW.nii.gz'),
-        'arteries': [1],
+        'arteries': [1, 2, 3, 5, 6, 7, 8, 11, 12, 13, 14],
         'is_replace': True,
         'org_pre_str': 'sub-',
         'org_post_str': '_run-1_mra_eICAB_CW.nii.gz',
@@ -561,7 +583,6 @@ options = [
 ]
 
 option_idx = 2
-
 option = options[option_idx]
 dataset_dir = option['dataset_dir']
 pattern = option['pattern']
@@ -572,8 +593,9 @@ org_post_str = option['org_post_str']
 seg_pre_str = option['seg_pre_str']
 seg_post_str = option['seg_post_str']
 
-if option_idx == 1:
-    stenosis_df = pd.read_csv('C:/Users/nguc4116/Desktop/filtered_stenosis_all.csv', sep=',')
+if option_idx == 2:
+    neurologist_df = pd.read_csv('C:/Users/nguc4116/Downloads/nomas_mra.csv', sep=',')
+    neurologist_df['ID'] = neurologist_df['ID'].astype(str)
 
 result_dir = 'C:/Users/nguc4116/Desktop/artery_reconstruction/info_files/'
 sub_nums = []
@@ -586,7 +608,7 @@ for filename in os.listdir(dataset_dir):
         sub_nums.append(str(index))
 
 
-for sub_num in ['1509']:
+for sub_num in ['53']:
     print(result_dir + str(sub_num))
     
     segment_file_path = dataset_dir + f'{org_pre_str}{str(sub_num)}{org_post_str}'
@@ -618,6 +640,7 @@ for sub_num in ['1509']:
     cons_points = []
     cen_points = []
     cen_values = []
+    meshes = []
 
     for artery_index in chosen_arteries:
         artery_key = "Artery_" + str(artery_index)
@@ -625,6 +648,11 @@ for sub_num in ['1509']:
         info[artery_key] = []
         min_vertices = []
 
+        neuro_row = neurologist_df[neurologist_df['ID'] == str(sub_num)].iloc[0]
+        sten_col_name = mapping_names[artery_index] + '_stenosis'
+        neuro_sten = int(neuro_row.get(sten_col_name.lower(), 0))
+        # if neuro_sten != 1:
+        #     continue
         if not os.path.isfile(info_dir + f'smooth_points_{artery_index}.txt'): 
             continue
         if os.path.isfile(info_dir + f'measure_{artery_index}.png') and not is_replace:
@@ -644,6 +672,7 @@ for sub_num in ['1509']:
         distance_threshold = 0.5
         new_splitted_lines, points_values, splitted_branches, longest_branch_idx = artery_analyse(artery_index, vmtk_boundary_vertices, smooth_points, smooth_connected_lines, distance_threshold, metric=1)
         ring_vertices, centerpoints, vertex_ring = find_ring_vertices(new_splitted_lines, smooth_points, vmtk_boundary_vertices, vmtk_boundary_faces)
+
         chosen_ring_vertices = [ring for idx, ring in enumerate(ring_vertices) if splitted_branches[idx] == longest_branch_idx]
         with open(info_dir + f'chosen_ring_{artery_index}.json', 'w') as file:
             json.dump(chosen_ring_vertices, file)  # indent=4 makes the file more readable
@@ -661,19 +690,37 @@ for sub_num in ['1509']:
         diameter_segments = compute_ring_diameters(chosen_ring_vertices, vmtk_boundary_vertices, chosen_centerpoints)
         min_distances, avg_distances = process_diameters(diameter_segments, chosen_ring_vertices, vmtk_boundary_vertices, chosen_centerpoints)
         
-        # Creating the DataFrame
-        x_values = [i*distance_threshold for i in range(len(chosen_ring_vertices))]
-        df = pd.DataFrame({
-            'ID': x_values,
-            'min_distances': np.array(min_distances),
-            'avg_radius': np.array(avg_distances),
-        })
+        avg_radius = np.mean(np.array(avg_distances))/2
+        centerpoints = np.array(centerpoints[int(0.1*len(centerpoints)):-int(0.1*len(centerpoints))])
+        tree = KDTree(centerpoints)
 
-        # Exporting the DataFrame to a CSV file
-        print('Finish')
-        df.to_csv(info_dir + f'measure_output_{artery_index}.csv', index=False)
+        # Query the tree for the single closest centerpoint for each point in vmtk_boundary_vertices
+        distances, indices = tree.query(vmtk_boundary_vertices, k=1)
+        distances = distances.reshape(-1, 1)
+        ratios = (avg_radius-distances)/avg_radius
+        ratios = np.clip(ratios, 0, 1) 
+        mesh = generate_mesh_color(vmtk_boundary_vertices, vmtk_boundary_faces, -1*ratios)
 
-    append_to_file(os.path.join(info_dir, 'start_points.txt'), np.array(start_points), is_replace)
-    append_to_file(os.path.join(info_dir, 'end_points.txt'), np.array(end_points), is_replace)
-    append_to_file(os.path.join(info_dir, 'middle_points.txt'), np.array(middle_points), is_replace)
-    append_to_file(os.path.join(info_dir, 'cons_points.txt'), np.array(cons_points), is_replace)
+        smooth_points = smooth_line(np.array([smooth_points[point_idx] for point_idx in smooth_connected_lines[0]]), 10)
+        line_traces = []
+        for idx in range(len(smooth_points)-1):
+            line_traces.append(generate_lines(np.array([smooth_points[idx], smooth_points[idx+1]]), 4))
+        meshes.append(mesh)
+
+    show_figure(meshes)
+    #     # Creating the DataFrame
+    #     x_values = [i*distance_threshold for i in range(len(chosen_ring_vertices))]
+    #     df = pd.DataFrame({
+    #         'ID': x_values,
+    #         'min_distances': np.array(min_distances),
+    #         'avg_radius': np.array(avg_distances),
+    #     })
+
+    #     # Exporting the DataFrame to a CSV file
+    #     print('Finish')
+    #     df.to_csv(info_dir + f'measure_output_{artery_index}.csv', index=False)
+
+    # append_to_file(os.path.join(info_dir, 'start_points.txt'), np.array(start_points), is_replace)
+    # append_to_file(os.path.join(info_dir, 'end_points.txt'), np.array(end_points), is_replace)
+    # append_to_file(os.path.join(info_dir, 'middle_points.txt'), np.array(middle_points), is_replace)
+    # append_to_file(os.path.join(info_dir, 'cons_points.txt'), np.array(cons_points), is_replace)
